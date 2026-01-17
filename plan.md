@@ -512,9 +512,3 @@ LIMIT $1 OFFSET $2;
 
 ### 9.4. Cron check
 `POST /v1/ingest/check` with header `X-API-Key`.
-
----
-
-## 10. Next Implementation Deliverable
-If you want, the next concrete deliverable is a minimal FastAPI skeleton plus SQLAlchemy models and a `process_video()` pipeline signature that you can plug your existing parsing code into. This makes execution straightforward and reduces "blank page" time.
-
