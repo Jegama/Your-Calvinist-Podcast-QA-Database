@@ -199,23 +199,32 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON ingest_jobs(status);
 
 ## 3. Optional Full-Text Search (`search_tsv` + GIN)
 
-This enables fast keyword search across question and answer.
+This enables fast keyword search across question and answer text.
 
-### 3.1. Add column and index
+### What is full-text search?
+
+PostgreSQL's full-text search is much faster than `LIKE '%word%'` queries because it:
+1. **Tokenizes** text into individual words
+2. **Stems** words to their roots (e.g., "baptizing" → "baptiz", "churches" → "church")
+3. **Removes stop words** like "the", "and", "is"
+4. **Stores as a vector** optimized for fast matching
+5. **Uses a GIN index** for sub-millisecond lookups even with thousands of rows
+
+This means searching for "infant baptism" will also match "infants", "baptized", "baptismal", etc.
+
+### 3.1. Add column and index (run FIRST)
 ```sql
 ALTER TABLE qa_items
   ADD COLUMN IF NOT EXISTS search_tsv tsvector;
-
-UPDATE qa_items
-SET search_tsv = to_tsvector('english', coalesce(question,'') || ' ' || coalesce(answer,''))
-WHERE search_tsv IS NULL;
 
 CREATE INDEX IF NOT EXISTS idx_qa_search_tsv
   ON qa_items USING GIN (search_tsv);
 ```
 
-### 3.2. Keep it updated
-**Option A (simple trigger)**
+### 3.2. Create trigger for automatic updates (run SECOND)
+
+**IMPORTANT**: The trigger must be created BEFORE inserting data, otherwise `search_tsv` will be NULL for those rows.
+
 ```sql
 CREATE OR REPLACE FUNCTION qa_items_search_tsv_update() RETURNS trigger AS $$
 BEGIN
@@ -231,7 +240,14 @@ BEFORE INSERT OR UPDATE OF question, answer ON qa_items
 FOR EACH ROW EXECUTE FUNCTION qa_items_search_tsv_update();
 ```
 
-### 3.3. Query example
+### 3.3. Backfill existing rows (run if data was inserted before trigger existed)
+```sql
+UPDATE qa_items
+SET search_tsv = to_tsvector('english', coalesce(question,'') || ' ' || coalesce(answer,''))
+WHERE search_tsv IS NULL;
+```
+
+### 3.4. Query example
 ```sql
 SELECT *
 FROM qa_items
@@ -239,6 +255,8 @@ WHERE search_tsv @@ plainto_tsquery('english', 'baptism covenant')
 ORDER BY ts_rank(search_tsv, plainto_tsquery('english', 'baptism covenant')) DESC
 LIMIT 50;
 ```
+
+**Note**: The FastAPI search endpoint (Phase 3) will use this query pattern.
 
 ---
 

@@ -122,7 +122,7 @@ Given the question and answer below, provide:
 Respond with valid JSON matching the schema. If the content is primarily sponsor material, live chat banter, or completely off-topic, use category "Non-Biblical Questions" with appropriate subcategory."""
         
         response = client.models.generate_content(
-            model="gemini-2.0-flash",
+            model="gemini-3-flash-preview",
             contents=prompt,
             config={
                 "response_mime_type": "application/json",
