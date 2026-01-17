@@ -30,7 +30,6 @@ class Settings:
     
     # Processing configuration
     ANSWER_PREVIEW_LENGTH: int = 500  # Characters for answer preview
-    MAX_CLASSIFICATION_SNIPPET: int = 2000  # Max chars to send for classification
     
     def validate(self) -> list[str]:
         """Check for missing required settings. Returns list of missing keys."""

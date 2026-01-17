@@ -77,10 +77,7 @@ def classify_question(
         # Load categories if not provided
         if categories_context is None:
             categories_context = load_categories()
-        
-        # Truncate answer to save tokens
-        snippet = answer_text[:settings.MAX_CLASSIFICATION_SNIPPET]
-        
+                
         prompt = f"""You are a theological classification assistant for the YourCalvinist Podcast Q&A database.
 
 ## CONTEXT
@@ -117,7 +114,7 @@ Given the question and answer below, provide:
 {question_text}
 
 ## ANSWER (from transcript, may contain extraneous content)
-{snippet}
+{answer_text}
 
 Respond with valid JSON matching the schema. If the content is primarily sponsor material, live chat banter, or completely off-topic, use category "Non-Biblical Questions" with appropriate subcategory."""
         
