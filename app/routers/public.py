@@ -5,7 +5,7 @@ Public read-only API endpoints for the website.
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func, text
+from sqlalchemy import func, text, select
 
 from app.dependencies import get_db
 from app.db.models import Video, QAItem, Tag, QAItemTag
@@ -124,7 +124,7 @@ def get_video_questions(
     youtube_id: str,
     category: Optional[str] = Query(default=None),
     subcategory: Optional[str] = Query(default=None),
-    tag: Optional[str] = Query(default=None),
+    tags: Optional[str] = Query(default=None, description="Comma-separated tags (AND logic)"),
     q: Optional[str] = Query(default=None, description="Keyword search in question/answer"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
@@ -135,7 +135,7 @@ def get_video_questions(
     
     - **category**: Filter by category
     - **subcategory**: Filter by subcategory
-    - **tag**: Filter by tag name
+    - **tags**: Comma-separated list of tags (AND logic - must have ALL tags)
     - **q**: Keyword search using full-text search
     """
     # Get video first
@@ -155,8 +155,19 @@ def get_video_questions(
     if subcategory:
         query = query.filter(QAItem.subcategory == subcategory)
     
-    if tag:
-        query = query.join(QAItem.tags).filter(Tag.name == tag)
+    # Multi-tag filter (AND logic)
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        for tag_name in tag_list:
+            # Use exists subquery for each tag
+            tag_exists = (
+                select(QAItemTag.qa_item_id)
+                .join(Tag, Tag.id == QAItemTag.tag_id)
+                .where(Tag.name == tag_name)
+                .where(QAItemTag.qa_item_id == QAItem.id)
+                .exists()
+            )
+            query = query.filter(tag_exists)
     
     if q:
         # Use full-text search
@@ -184,14 +195,85 @@ def get_video_questions(
     return results
 
 
-# --- Q&A / Search Endpoints ---
+# --- Q&A / Browse & Search Endpoints ---
+
+@router.get("/questions", response_model=list[QAItemOut])
+def list_questions(
+    category: Optional[str] = Query(default=None, description="Filter by category"),
+    subcategory: Optional[str] = Query(default=None, description="Filter by subcategory"),
+    tags: Optional[str] = Query(default=None, description="Filter by tags (comma-separated, AND logic)"),
+    limit: int = Query(default=50, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
+    db: Session = Depends(get_db),
+):
+    """
+    Get all Q&A items across all videos with filtering.
+    
+    This endpoint allows browsing questions by category, subcategory, and tags
+    without requiring a specific video ID.
+    
+    - **category**: Filter by category (e.g., "Theology")
+    - **subcategory**: Filter by subcategory (e.g., "Soteriology")
+    - **tags**: Comma-separated list of tags (AND logic - must have ALL tags)
+    
+    Examples:
+    - `/v1/questions?category=Theology`
+    - `/v1/questions?category=Theology&subcategory=Soteriology`
+    - `/v1/questions?tags=Calvinism,Election`
+    - `/v1/questions?category=Theology&tags=baptism`
+    """
+    # Only get questions from processed videos
+    query = db.query(QAItem).join(Video).filter(Video.status == "processed")
+    
+    # Apply category filter
+    if category:
+        query = query.filter(QAItem.category == category)
+    
+    # Apply subcategory filter
+    if subcategory:
+        query = query.filter(QAItem.subcategory == subcategory)
+    
+    # Apply multi-tag filter (AND logic - must have ALL specified tags)
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        for tag_name in tag_list:
+            # Use exists subquery for each tag
+            tag_exists = (
+                select(QAItemTag.qa_item_id)
+                .join(Tag, Tag.id == QAItemTag.tag_id)
+                .where(Tag.name == tag_name)
+                .where(QAItemTag.qa_item_id == QAItem.id)
+                .exists()
+            )
+            query = query.filter(tag_exists)
+    
+    # Order by most recent video first, then by timestamp
+    query = query.order_by(Video.published_at.desc(), QAItem.timestamp_seconds)
+    qa_items = query.offset(offset).limit(limit).all()
+    
+    # Convert to response model
+    results = []
+    for item in qa_items:
+        results.append(QAItemOut(
+            id=str(getattr(item, 'id')),
+            timestamp_text=getattr(item, 'timestamp_text'),
+            timestamp_seconds=getattr(item, 'timestamp_seconds'),
+            question=getattr(item, 'question'),
+            answer_preview=getattr(item, 'answer_preview'),
+            category=getattr(item, 'category'),
+            subcategory=getattr(item, 'subcategory'),
+            tags=[getattr(t, 'name') for t in item.tags],
+        ))
+    
+    return results
+
 
 @router.get("/questions/search", response_model=SearchResponse)
 def search_questions(
     q: str = Query(..., min_length=2, description="Search query"),
     category: Optional[str] = Query(default=None),
     subcategory: Optional[str] = Query(default=None),
-    tag: Optional[str] = Query(default=None),
+    tags: Optional[str] = Query(default=None, description="Comma-separated tags (AND logic)"),
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -202,7 +284,12 @@ def search_questions(
     - **q**: Search query (required, min 2 chars)
     - **category**: Filter by category
     - **subcategory**: Filter by subcategory  
-    - **tag**: Filter by tag name
+    - **tags**: Comma-separated list of tags (AND logic - must have ALL tags)
+    
+    Examples:
+    - `/v1/questions/search?q=baptism`
+    - `/v1/questions/search?q=salvation&category=Theology`
+    - `/v1/questions/search?q=grace&tags=Calvinism,Election`
     """
     # Build the search query using raw SQL for ranking
     base_sql = """
@@ -237,9 +324,13 @@ def search_questions(
         base_sql += " AND q.subcategory = :subcategory"
         params["subcategory"] = subcategory
     
-    if tag:
-        base_sql += " AND EXISTS (SELECT 1 FROM qa_item_tags qt2 JOIN tags t2 ON t2.id = qt2.tag_id WHERE qt2.qa_item_id = q.id AND t2.name = :tag)"
-        params["tag"] = tag
+    # Multi-tag filter (AND logic)
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        for i, tag_name in enumerate(tag_list):
+            param_name = f"tag_{i}"
+            base_sql += f" AND EXISTS (SELECT 1 FROM qa_item_tags qt{i} JOIN tags t{i} ON t{i}.id = qt{i}.tag_id WHERE qt{i}.qa_item_id = q.id AND t{i}.name = :{param_name})"
+            params[param_name] = tag_name
     
     base_sql += """
         GROUP BY q.id, v.youtube_id, v.title
@@ -265,9 +356,14 @@ def search_questions(
     if subcategory:
         count_sql += " AND q.subcategory = :subcategory"
         count_params["subcategory"] = subcategory
-    if tag:
-        count_sql += " AND EXISTS (SELECT 1 FROM qa_item_tags qt2 JOIN tags t2 ON t2.id = qt2.tag_id WHERE qt2.qa_item_id = q.id AND t2.name = :tag)"
-        count_params["tag"] = tag
+    
+    # Multi-tag filter for count query
+    if tags:
+        tag_list = [t.strip() for t in tags.split(",") if t.strip()]
+        for i, tag_name in enumerate(tag_list):
+            param_name = f"tag_{i}"
+            count_sql += f" AND EXISTS (SELECT 1 FROM qa_item_tags qt{i} JOIN tags t{i} ON t{i}.id = qt{i}.tag_id WHERE qt{i}.qa_item_id = q.id AND t{i}.name = :{param_name})"
+            count_params[param_name] = tag_name
     
     total = db.execute(text(count_sql), count_params).scalar() or 0
     
