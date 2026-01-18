@@ -24,6 +24,19 @@ router = APIRouter(
 )
 
 
+# --- Cron endpoint (GET for Vercel Cron compatibility) ---
+
+@router.get("/check", response_model=IngestCheckResponse)
+def cron_check_for_new_videos(db: Session = Depends(get_db)):
+    """
+    GET endpoint for Vercel Cron to check for new videos.
+    
+    This is the same as POST /check but uses GET for Vercel Cron compatibility.
+    Vercel Cron sends Authorization: Bearer <CRON_SECRET> header.
+    """
+    return _check_for_new_videos(db)
+
+
 @router.post("/check", response_model=IngestCheckResponse)
 def check_for_new_videos(db: Session = Depends(get_db)):
     """
@@ -35,6 +48,11 @@ def check_for_new_videos(db: Session = Depends(get_db)):
     
     Requires X-API-Key header.
     """
+    return _check_for_new_videos(db)
+
+
+def _check_for_new_videos(db: Session) -> IngestCheckResponse:
+    """Internal implementation for check endpoint."""
     try:
         # Get all video IDs from playlist
         playlist_ids = get_playlist_video_ids()
@@ -141,6 +159,21 @@ def run_one_job(
         )
 
 
+@router.get("/run-batch", response_model=list[IngestRunResponse])
+def cron_run_batch_jobs(
+    max_jobs: int = 5,
+    skip_classification: bool = False,
+    db: Session = Depends(get_db),
+):
+    """
+    GET endpoint for Vercel Cron to process pending jobs.
+    
+    This is the same as POST /run-batch but uses GET for Vercel Cron compatibility.
+    Vercel Cron sends Authorization: Bearer <CRON_SECRET> header.
+    """
+    return _run_batch_jobs(db, max_jobs, skip_classification)
+
+
 @router.post("/run-batch", response_model=list[IngestRunResponse])
 def run_batch_jobs(
     max_jobs: int = 5,
@@ -155,6 +188,15 @@ def run_batch_jobs(
     
     Requires X-API-Key header.
     """
+    return _run_batch_jobs(db, max_jobs, skip_classification)
+
+
+def _run_batch_jobs(
+    db: Session,
+    max_jobs: int = 5,
+    skip_classification: bool = False,
+) -> list[IngestRunResponse]:
+    """Internal implementation for run-batch endpoint."""
     results = []
     
     for _ in range(max_jobs):

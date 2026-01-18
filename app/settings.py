@@ -27,6 +27,7 @@ class Settings:
     
     # API Security
     ADMIN_API_KEY: str = os.getenv("ADMIN_API_KEY", "")
+    CRON_SECRET: str = os.getenv("CRON_SECRET", "")
     
     # Processing configuration
     ANSWER_PREVIEW_LENGTH: int = 500  # Characters for answer preview

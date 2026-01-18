@@ -11,5 +11,15 @@
       "src": "/(.*)",
       "dest": "app/main.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/v1/ingest/check",
+      "schedule": "0 7 * * *"
+    },
+    {
+      "path": "/v1/ingest/run-batch?max_jobs=5",
+      "schedule": "5 7 * * *"
+    }
   ]
 }
