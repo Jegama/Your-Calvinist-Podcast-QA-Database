@@ -64,22 +64,27 @@ def _check_for_new_videos(db: Session) -> IngestCheckResponse:
                 message="No videos found in playlist or API error"
             )
         
-        # Find which ones are new
+        # Find which ones are new or failed
         new_ids = []
         for youtube_id in playlist_ids:
-            # Check if video exists
+            # Check if video exists and is successfully processed
             existing_video = crud.get_video_by_youtube_id(db, youtube_id)
-            if existing_video:
-                continue
+            if existing_video is not None:
+                video_status = getattr(existing_video, 'status', '')
+                if video_status == 'processed':
+                    # Video already successfully processed, skip
+                    continue
             
-            # Check if job already exists
+            # Check if job already exists and is pending/processing
             existing_job = db.query(IngestJob).filter(
-                IngestJob.youtube_id == youtube_id
+                IngestJob.youtube_id == youtube_id,
+                IngestJob.status.in_(['pending', 'processing'])
             ).first()
             if existing_job:
+                # Job already queued or being processed, skip
                 continue
             
-            # Create new job
+            # Create new job (either new video or failed video that needs retry)
             crud.create_ingest_job(db, youtube_id)
             new_ids.append(youtube_id)
         
@@ -88,7 +93,7 @@ def _check_for_new_videos(db: Session) -> IngestCheckResponse:
         return IngestCheckResponse(
             new_videos_found=len(new_ids),
             video_ids=new_ids,
-            message=f"Found {len(new_ids)} new videos to process"
+            message=f"Enqueued {len(new_ids)} video(s) for processing (new or failed)"
         )
         
     except Exception as e:

@@ -32,6 +32,10 @@ class Settings:
     # Processing configuration
     ANSWER_PREVIEW_LENGTH: int = 500  # Characters for answer preview
     
+    # Transcript fetching (optional - for IP blocking issues)
+    YOUTUBE_PROXY: str = os.getenv("YOUTUBE_PROXY", "")  # Format: http://proxy:port
+    YOUTUBE_COOKIES: str = os.getenv("YOUTUBE_COOKIES", "")  # Path to cookies.txt file
+    
     def validate(self) -> list[str]:
         """Check for missing required settings. Returns list of missing keys."""
         missing = []

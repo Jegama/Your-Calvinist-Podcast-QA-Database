@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 from app.settings import get_settings
 from app.youtube.ids import get_video_id
 from app.ingest.pipeline import process_video, ProcessResult
+from app.db.engine import get_session
+from app.db import crud
 
 
 @dataclass
@@ -85,6 +87,7 @@ def run_backfill(
     limit: int | None = None,
     dry_run: bool = False,
     delay: float = 1.0,
+    skip_processed: bool = False,
 ) -> BackfillStats:
     """
     Process a list of video URLs.
@@ -95,6 +98,7 @@ def run_backfill(
         limit: Maximum number of videos to process
         dry_run: If True, don't save to database
         delay: Seconds to wait between videos
+        skip_processed: If True, skip videos that are already processed
         
     Returns:
         BackfillStats with results
@@ -118,6 +122,15 @@ def run_backfill(
             continue
         
         print(f"[{i}/{len(urls)}] {video_id}")
+        
+        # Check if already processed (if requested)
+        if skip_processed:
+            with get_session() as session:
+                existing = crud.get_video_by_youtube_id(session, video_id)
+                if existing and getattr(existing, 'status', '') == 'processed':
+                    print("  Already processed - skipping")
+                    stats.skipped += 1
+                    continue
         
         if dry_run:
             print("  (dry run - skipping)")
@@ -166,6 +179,11 @@ def main():
         "--skip-classification",
         action="store_true",
         help="Skip LLM classification step"
+    )
+    parser.add_argument(
+        "--skip-processed",
+        action="store_true",
+        help="Skip videos that are already successfully processed"
     )
     parser.add_argument(
         "--dry-run",
@@ -217,6 +235,7 @@ def main():
             limit=args.limit,
             dry_run=args.dry_run,
             delay=args.delay,
+            skip_processed=args.skip_processed,
         )
         stats.print_summary()
         

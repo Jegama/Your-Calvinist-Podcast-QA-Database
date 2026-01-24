@@ -189,8 +189,30 @@ app/
 To process existing videos locally:
 
 ```bash
-python -m app.cli.backfill --input playlist_videos.txt --verbose
+python -m app.cli.backfill --input playlist_videos.txt
 ```
+
+To process only unprocessed videos:
+
+```bash
+python -m app.cli.backfill --input playlist_videos.txt --skip-processed
+```
+
+#### Failed Videos Not Retrying
+
+If videos show `status='failed'` but never retry:
+- Fixed in commit [link] - cron now retries failed videos up to 3 attempts
+- Manually re-queue: Use [check_recent_videos.ipynb](check_recent_videos.ipynb) `requeue_failed_videos()` function
+
+#### Private Videos
+
+Videos with `status='failed'` and error "Failed to fetch video metadata" are likely:
+- Made private by the creator
+- Deleted
+- Restricted by region/age
+
+These cannot be processed automatically.
+
 
 ### Cron Configuration
 
@@ -198,6 +220,13 @@ The app is configured with two Vercel Cron jobs (see `vercel.json`):
 
 1. **2:00 AM ET** - Check playlist for new videos
 2. **2:05 AM ET** - Process up to 5 pending videos
+
+---
+
+## Monitoring
+
+- **Check recent videos**: Run [check_recent_videos.ipynb](check_recent_videos.ipynb)
+- **Check Q&A counts**: Run [video_qa_counts.ipynb](video_qa_counts.ipynb) to find videos without timestamps
 
 ---
 

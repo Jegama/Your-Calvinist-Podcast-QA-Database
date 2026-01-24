@@ -5,6 +5,7 @@ Fetch transcripts from YouTube videos.
 from typing import Optional
 from dataclasses import dataclass
 from youtube_transcript_api import YouTubeTranscriptApi
+from app.settings import get_settings
 
 
 @dataclass
@@ -28,8 +29,17 @@ def get_raw_transcript(video_id: str) -> Optional[list[TranscriptSegment]]:
         List of TranscriptSegment objects, or None if unavailable
     """
     try:
+        settings = get_settings()
+        
+        # Build kwargs for YouTubeTranscriptApi
+        api_kwargs = {}
+        if settings.YOUTUBE_PROXY:
+            api_kwargs['proxies'] = {'https': settings.YOUTUBE_PROXY}
+        if settings.YOUTUBE_COOKIES:
+            api_kwargs['cookies'] = settings.YOUTUBE_COOKIES
+        
         yt = YouTubeTranscriptApi()
-        transcript_list = yt.list(video_id)
+        transcript_list = yt.list(video_id, **api_kwargs)
         
         # Try manual English first, then auto-generated
         try:
