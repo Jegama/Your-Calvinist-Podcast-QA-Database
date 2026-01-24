@@ -158,30 +158,31 @@ Visit the interactive docs at `/docs` to explore all endpoints, try them live, a
 
 ```
 app/
-├── main.py              # FastAPI application entry point
-├── settings.py          # Environment configuration
-├── schemas.py           # Pydantic models
-├── dependencies.py      # FastAPI dependencies (auth, db)
+├── main.py                          # FastAPI application entry point
+├── settings.py                      # Environment configuration
+├── schemas.py                       # Pydantic models
+├── dependencies.py                  # FastAPI dependencies (auth, db)
 ├── db/
-│   ├── engine.py        # SQLAlchemy engine setup
-│   ├── models.py        # ORM models
-│   └── crud.py          # Database operations
+│   ├── engine.py                    # SQLAlchemy engine setup
+│   ├── models.py                    # ORM models
+│   └── crud.py                      # Database operations
 ├── youtube/
-│   ├── metadata.py      # YouTube Data API client
-│   ├── timestamps.py    # Description parser
-│   ├── transcript.py    # Transcript fetcher
-│   └── playlist.py      # Playlist operations
+│   ├── metadata.py                  # YouTube Data API client
+│   ├── timestamps.py                # Description parser
+│   ├── transcript.py                # Transcript fetcher
+│   └── playlist.py                  # Playlist operations
 ├── qa/
-│   ├── answer_slicer.py # Transcript slicing logic
-│   └── classify.py      # Gemini classification
+│   ├── answer_slicer.py             # Transcript slicing logic
+│   └── classify.py                  # Gemini classification
 ├── ingest/
-│   ├── pipeline.py      # Main processing pipeline
-│   └── jobs.py          # Job queue management
+│   ├── pipeline.py                  # Main processing pipeline
+│   └── jobs.py                      # Job queue management
 ├── routers/
-│   ├── public.py        # Public GET endpoints
-│   └── ingest.py        # Protected ingestion endpoints
+│   ├── public.py                    # Public GET endpoints
+│   └── ingest.py                    # Protected ingestion endpoints
 └── cli/
-    └── backfill.py      # Bulk processing script
+    ├── backfill.py                  # Bulk processing script
+    └── ingest_manual_timestamps.py  # Manual timestamp ingestion
 ```
 
 ### Running the Backfill

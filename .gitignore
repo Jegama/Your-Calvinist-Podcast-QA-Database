@@ -51,6 +51,9 @@ htmlcov/
 
 # Output directories (local processing artifacts)
 out/
+exports/
+inferred-questions/
+prompts/
 
 # Logs
 *.log
