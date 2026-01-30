@@ -51,6 +51,10 @@ def check_for_new_videos(db: Session = Depends(get_db)):
     return _check_for_new_videos(db)
 
 
+# Video IDs to skip (known bad IDs, wrong playlist entries, etc.)
+SKIP_VIDEO_IDS = {"4QpzXOyWDrE"}
+
+
 def _check_for_new_videos(db: Session) -> IngestCheckResponse:
     """Internal implementation for check endpoint."""
     try:
@@ -67,6 +71,10 @@ def _check_for_new_videos(db: Session) -> IngestCheckResponse:
         # Find which ones are new or failed
         new_ids = []
         for youtube_id in playlist_ids:
+            # Skip known bad video IDs
+            if youtube_id in SKIP_VIDEO_IDS:
+                continue
+            
             # Check if video exists and is successfully processed
             existing_video = crud.get_video_by_youtube_id(db, youtube_id)
             if existing_video is not None:
