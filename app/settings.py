@@ -35,6 +35,12 @@ class Settings:
     # Transcript fetching (optional - for IP blocking issues)
     YOUTUBE_PROXY: str = os.getenv("YOUTUBE_PROXY", "")  # Format: http://proxy:port
     YOUTUBE_COOKIES: str = os.getenv("YOUTUBE_COOKIES", "")  # Path to cookies.txt file
+    YOUTUBE_PROXY_VERIFY_SSL: bool = os.getenv("YOUTUBE_PROXY_VERIFY_SSL", "true").lower() in (
+        "1",
+        "true",
+        "yes",
+        "on",
+    )
     
     def validate(self) -> list[str]:
         """Check for missing required settings. Returns list of missing keys."""
