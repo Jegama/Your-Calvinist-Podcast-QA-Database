@@ -136,14 +136,19 @@ Only serves videos with `status='processed'`:
 
 ### MCP API (`app/mcp_server.py`)
 
-The app also mounts an MCP server for LLM-facing access:
+The app mounts an MCP server for LLM-facing access (no auth required):
 - Streamable HTTP at `/mcp/` (preferred production transport)
-- SSE compatibility at `/sse`
+- SSE compatibility at `/sse` (legacy; mounted at its own path to avoid shadowing FastAPI routes)
+
+All tools carry `ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)` so MCP clients can auto-approve them.
 
 Tools:
-- `search_keith_archive`
-- `get_keith_answer`
-- `list_keith_topics`
+- `search_keith_archive` — full-text search with category/subcategory/tag filters
+- `get_keith_answer` — fetch complete answer by question UUID
+- `list_keith_topics` — list categories, subcategories, popular tags
+
+Resources:
+- `keith://topics` — full topic taxonomy as JSON; clients can read this without a tool call (cheaper than `list_keith_topics` for static data)
 
 Prompts instruct clients to answer only from retrieved Keith Foskey archive material and to cite the returned source URLs.
 

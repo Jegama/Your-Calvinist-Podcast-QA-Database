@@ -17,7 +17,7 @@ from app.routers import public_router, ingest_router
 
 archive_mcp.settings.streamable_http_path = "/"
 archive_mcp_http_app = archive_mcp.streamable_http_app()
-archive_mcp_sse_app = archive_mcp.sse_app("/sse")
+archive_mcp_sse_app = archive_mcp.sse_app()  # legacy SSE transport
 
 
 @asynccontextmanager
@@ -98,4 +98,4 @@ def health_check():
 
 
 app.mount("/mcp", archive_mcp_http_app)
-app.mount("/", archive_mcp_sse_app)
+app.mount("/sse", archive_mcp_sse_app)  # legacy; prefer /mcp/

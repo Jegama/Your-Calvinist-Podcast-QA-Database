@@ -2,13 +2,15 @@
 
 from __future__ import annotations
 
-import os
+import logging
 from typing import Optional
 
 from app.settings import get_settings
 
+logger = logging.getLogger(__name__)
 
-def generate_grounded_answer(question: str, sources: list[dict]) -> Optional[str]:
+
+async def generate_grounded_answer(question: str, sources: list[dict]) -> Optional[str]:
     """Generate a grounded answer using only retrieved archive sources."""
     settings = get_settings()
     if not settings.GEMINI_API_KEY:
@@ -18,18 +20,13 @@ def generate_grounded_answer(question: str, sources: list[dict]) -> Optional[str
         return None
 
     try:
+        import warnings
         from google import genai
         from google.genai import types
 
-        original_google_key = os.environ.get("GOOGLE_API_KEY")
-        if original_google_key:
-            del os.environ["GOOGLE_API_KEY"]
-
-        try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        finally:
-            if original_google_key:
-                os.environ["GOOGLE_API_KEY"] = original_google_key
 
         formatted_sources = []
         for index, source in enumerate(sources, start=1):
@@ -57,7 +54,7 @@ def generate_grounded_answer(question: str, sources: list[dict]) -> Optional[str
             + "\n\n".join(formatted_sources)
         )
 
-        response = client.models.generate_content(
+        response = await client.aio.models.generate_content(
             model="gemini-3-flash-preview",
             contents=prompt,
             config=types.GenerateContentConfig(
@@ -72,5 +69,6 @@ def generate_grounded_answer(question: str, sources: list[dict]) -> Optional[str
             return None
 
         return text.strip()
-    except Exception:
+    except Exception as e:
+        logger.exception("Gemini content generation failed in /v1/ask")
         return None

@@ -58,21 +58,13 @@ def classify_question(
         return None
     
     try:
+        import warnings
         from google import genai
         
         # Suppress "Both GOOGLE_API_KEY and GEMINI_API_KEY are set" warning
-        # by temporarily clearing GOOGLE_API_KEY for this client
-        import os
-        original_google_key = os.environ.get('GOOGLE_API_KEY')
-        if original_google_key:
-            del os.environ['GOOGLE_API_KEY']
-        
-        try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
             client = genai.Client(api_key=settings.GEMINI_API_KEY)
-        finally:
-            # Restore the key
-            if original_google_key:
-                os.environ['GOOGLE_API_KEY'] = original_google_key
         
         # Load categories if not provided
         if categories_context is None:

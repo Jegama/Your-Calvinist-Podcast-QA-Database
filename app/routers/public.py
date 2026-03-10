@@ -29,7 +29,7 @@ router = APIRouter(prefix="/v1", tags=["public"])
 
 
 @router.post("/ask", response_model=AskResponse)
-def ask_archive(
+async def ask_archive(
     payload: AskRequest,
     db: Session = Depends(get_db),
 ):
@@ -76,7 +76,7 @@ def ask_archive(
             disclaimer=disclaimer,
         )
 
-    generated_answer = generate_grounded_answer(payload.question, answer_sources)
+    generated_answer = await generate_grounded_answer(payload.question, answer_sources)
     if not generated_answer:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

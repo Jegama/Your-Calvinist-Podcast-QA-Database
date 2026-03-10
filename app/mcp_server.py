@@ -6,6 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, Field
 from mcp.server.fastmcp import FastMCP
+from mcp.types import ToolAnnotations
 
 from app.archive import get_archive_answer, list_archive_topics, search_archive
 from app.db.engine import get_session
@@ -80,7 +81,29 @@ archive_mcp = FastMCP(
 )
 
 
-@archive_mcp.tool()
+_READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
+
+
+# ---------------------------------------------------------------------------
+# Resources – static/cacheable data clients can read without a tool call
+# ---------------------------------------------------------------------------
+
+@archive_mcp.resource(
+    "keith://topics",
+    name="Archive Topics",
+    description="All categories, subcategories, and popular tags in the Keith Foskey archive. Read this before filtering a search.",
+    mime_type="application/json",
+)
+def topics_resource() -> str:
+    """Return the full topic taxonomy as JSON."""
+    import json
+
+    with get_session() as session:
+        data = list_archive_topics(session, tag_limit=200)
+    return json.dumps(data)
+
+
+@archive_mcp.tool(annotations=_READ_ONLY)
 def search_keith_archive(
     query: str,
     limit: int = 5,
@@ -89,7 +112,13 @@ def search_keith_archive(
     tags: Optional[str] = None,
     include_answers: bool = False,
 ) -> ArchiveSearchResponse:
-    """Search Keith Foskey's archived Q&A by keyword with optional topic filters."""
+    """Search Keith Foskey's archived Q&A by keyword with optional topic filters.
+
+    Use this as the primary entry point to find what Keith has said on a topic.
+    Results are ranked by relevance. Set include_answers=True to get full answer
+    text inline (useful when you need content without a follow-up get_keith_answer call).
+    Tags are comma-separated for AND logic, e.g. 'Calvinism,Election'.
+    """
     with get_session() as session:
         result = search_archive(
             session,
@@ -103,9 +132,13 @@ def search_keith_archive(
     return ArchiveSearchResponse.model_validate(result)
 
 
-@archive_mcp.tool()
+@archive_mcp.tool(annotations=_READ_ONLY)
 def get_keith_answer(question_id: str) -> ArchiveAnswerDetail:
-    """Fetch the full archived answer for a single question by ID."""
+    """Fetch the full archived answer for a single question by its UUID.
+
+    Call this after search_keith_archive to retrieve the complete answer text
+    for the most relevant hits. The question_id comes from search results.
+    """
     with get_session() as session:
         result = get_archive_answer(session, question_id)
     if result is None:
@@ -113,9 +146,13 @@ def get_keith_answer(question_id: str) -> ArchiveAnswerDetail:
     return ArchiveAnswerDetail.model_validate(result)
 
 
-@archive_mcp.tool()
+@archive_mcp.tool(annotations=_READ_ONLY)
 def list_keith_topics(tag_limit: int = 100) -> ArchiveTopics:
-    """List available categories, subcategories, and popular tags from the archive."""
+    """List available categories, subcategories, and popular tags from the archive.
+
+    Call this to discover what topics exist before filtering a search.
+    Categories and subcategories are exhaustive; tags are sorted by popularity.
+    """
     with get_session() as session:
         result = list_archive_topics(session, tag_limit=max(1, min(tag_limit, 500)))
     return ArchiveTopics.model_validate(result)

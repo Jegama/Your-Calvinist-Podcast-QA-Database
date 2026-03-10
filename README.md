@@ -13,26 +13,90 @@ A FastAPI application that extracts, classifies, and serves timestamped Q&A cont
 
 ## MCP Access
 
-This project can now be exposed as an MCP server alongside the REST API.
+This project exposes an MCP server alongside the REST API. No authentication is required.
 
-- Streamable HTTP endpoint: `https://keithfoskey.calvinistparrot.com/mcp/`
-- SSE compatibility endpoint: `https://keithfoskey.calvinistparrot.com/sse`
+- **Streamable HTTP** (preferred): `https://keithfoskey.calvinistparrot.com/mcp/`
+- **SSE** (legacy compatibility): `https://keithfoskey.calvinistparrot.com/sse`
 
-Available MCP tools:
+### Tools
 
-- `search_keith_archive` searches Keith Foskey's archived Q&A with optional category, subcategory, and tag filters
-- `get_keith_answer` fetches the full answer for a single archived question
-- `list_keith_topics` returns available categories, subcategories, and popular tags
+All tools are annotated as read-only (`readOnlyHint: true`) so MCP clients can auto-approve them.
 
-MCP search and answer responses now include a structured `citation` object with the question id, video metadata, timestamp, excerpt, and the fully built YouTube timestamp URL.
+| Tool | Description |
+|------|-------------|
+| `search_keith_archive` | Full-text search across archived Q&A with optional category, subcategory, and tag filters. Results ranked by relevance. |
+| `get_keith_answer` | Fetch the complete answer for a single question by UUID (returned by search). |
+| `list_keith_topics` | List all categories, subcategories, and popular tags for discovery and filtering. |
 
-Available MCP prompts:
+Search and answer responses include a structured `citation` object with question id, video metadata, timestamp, excerpt, and the fully built YouTube timestamp URL.
 
-- `answer_from_keith_archive` for grounded answers from retrieved archive material
-- `find_keith_answer_with_citations` for short answers with explicit source links
-- `summarize_keith_position_carefully` for cautious topic summaries that avoid unsupported claims
+### Resources
 
-For production MCP clients, prefer the Streamable HTTP endpoint. SSE is included for compatibility with clients that still expect an `/sse` style transport.
+| URI | Description |
+|-----|-------------|
+| `keith://topics` | Full topic taxonomy (categories, subcategories, tags) as JSON. Clients can read this without a tool call. |
+
+### Prompts
+
+| Prompt | Description |
+|--------|-------------|
+| `answer_from_keith_archive` | Grounded answers from retrieved archive material with citations |
+| `find_keith_answer_with_citations` | Short answers with explicit source links |
+| `summarize_keith_position_carefully` | Cautious topic summaries that avoid unsupported claims |
+
+### Quick Start
+
+#### Claude Desktop
+
+1. Open **Settings** -> **Connectors**
+2. Click **Add Custom Connector**
+3. Paste: `https://keithfoskey.calvinistparrot.com/mcp/`
+4. Restart Claude Desktop
+
+That's it. No signup, no API keys, no downloads.
+
+#### Claude Code
+
+```bash
+claude mcp add keith-foskey-archive https://keithfoskey.calvinistparrot.com/mcp/
+```
+
+#### Cursor
+
+Add to your `.cursor/mcp.json`:
+
+```json
+{
+  "mcpServers": {
+    "keith-foskey-archive": {
+      "url": "https://keithfoskey.calvinistparrot.com/mcp/"
+    }
+  }
+}
+```
+
+#### Manual Config (Alternative)
+
+If you prefer editing config files directly:
+
+```json
+{
+  "mcpServers": {
+    "keith-foskey-archive": {
+      "url": "https://keithfoskey.calvinistparrot.com/mcp/"
+    }
+  }
+}
+```
+
+Config file locations:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%\Claude\claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+#### SSE (Legacy Clients)
+
+If your client only supports SSE, use `https://keithfoskey.calvinistparrot.com/sse` as the endpoint instead.
 
 ## Features
 
