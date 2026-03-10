@@ -11,6 +11,29 @@ A FastAPI application that extracts, classifies, and serves timestamped Q&A cont
 **Live API**: https://keithfoskey.calvinistparrot.com  
 **Interactive Docs**: https://keithfoskey.calvinistparrot.com/docs
 
+## MCP Access
+
+This project can now be exposed as an MCP server alongside the REST API.
+
+- Streamable HTTP endpoint: `https://keithfoskey.calvinistparrot.com/mcp/`
+- SSE compatibility endpoint: `https://keithfoskey.calvinistparrot.com/sse`
+
+Available MCP tools:
+
+- `search_keith_archive` searches Keith Foskey's archived Q&A with optional category, subcategory, and tag filters
+- `get_keith_answer` fetches the full answer for a single archived question
+- `list_keith_topics` returns available categories, subcategories, and popular tags
+
+MCP search and answer responses now include a structured `citation` object with the question id, video metadata, timestamp, excerpt, and the fully built YouTube timestamp URL.
+
+Available MCP prompts:
+
+- `answer_from_keith_archive` for grounded answers from retrieved archive material
+- `find_keith_answer_with_citations` for short answers with explicit source links
+- `summarize_keith_position_carefully` for cautious topic summaries that avoid unsupported claims
+
+For production MCP clients, prefer the Streamable HTTP endpoint. SSE is included for compatibility with clients that still expect an `/sse` style transport.
+
 ## Features
 
 - 🎯 **Automatic Q&A Extraction** - Parses timestamps from video descriptions and slices transcripts into Q&A pairs
@@ -37,6 +60,7 @@ https://keithfoskey.calvinistparrot.com
 | `GET /v1/questions` | **Browse all questions** with category/tag filtering |
 | `GET /v1/questions/search?q=...` | Full-text search across all Q&A |
 | `GET /v1/questions/{question_id}` | Get a single question with full answer |
+| `POST /v1/ask` | Human-facing archive Q&A in `research` or `answer` mode |
 | `GET /v1/categories` | List all categories |
 | `GET /v1/subcategories` | List all subcategories (filterable by category) |
 | `GET /v1/tags` | List all tags by popularity |
@@ -90,6 +114,24 @@ Response:
     }
   ]
 }
+```
+
+### Example: Ask The Archive
+
+Research mode returns retrieved sources only:
+
+```bash
+curl -X POST "https://keithfoskey.calvinistparrot.com/v1/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What does Keith say about infant baptism?","mode":"research"}'
+```
+
+Answer mode returns a grounded answer plus citations:
+
+```bash
+curl -X POST "https://keithfoskey.calvinistparrot.com/v1/ask" \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What does Keith say about infant baptism?","mode":"answer"}'
 ```
 
 ### Building YouTube Links

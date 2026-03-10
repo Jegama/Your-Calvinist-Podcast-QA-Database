@@ -6,7 +6,7 @@ from sqlalchemy import (
     Column, String, Text, Integer, DateTime, ForeignKey, 
     UniqueConstraint, Index, func
 )
-from sqlalchemy.dialects.postgresql import UUID, JSONB
+from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
 from sqlalchemy.orm import declarative_base, relationship
 import uuid
 
@@ -51,6 +51,7 @@ class QAItem(Base):
     answer_preview = Column(Text)  # First 500 chars
     category = Column(Text)
     subcategory = Column(Text)
+    search_tsv = Column(TSVECTOR)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
     # Relationships

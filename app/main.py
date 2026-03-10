@@ -5,11 +5,25 @@ Podcast Q&A API - Provides endpoints to query theological Q&A content
 from the YourCalvinist Podcast with Keith Foskey.
 """
 
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.mcp_server import archive_mcp
 from app.settings import get_settings
 from app.routers import public_router, ingest_router
+
+
+archive_mcp.settings.streamable_http_path = "/"
+archive_mcp_http_app = archive_mcp.streamable_http_app()
+archive_mcp_sse_app = archive_mcp.sse_app("/sse")
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    async with archive_mcp.session_manager.run():
+        yield
 
 # Create FastAPI app
 app = FastAPI(
@@ -30,6 +44,7 @@ Ingestion endpoints (POST) require an `X-API-Key` header.
     version="1.0.0",
     docs_url="/docs",
     redoc_url="/redoc",
+    lifespan=lifespan,
 )
 
 # Configure CORS
@@ -47,8 +62,9 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
     allow_credentials=True,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["*"],
+    expose_headers=["Mcp-Session-Id"],
 )
 
 # Include routers
@@ -66,6 +82,10 @@ def root():
         "version": "1.0.0",
         "status": "healthy",
         "docs": "/docs",
+        "mcp": {
+            "streamable_http": "/mcp/",
+            "sse": "/sse",
+        },
     }
 
 
@@ -75,3 +95,7 @@ def health_check():
     Health check endpoint for monitoring.
     """
     return {"status": "ok"}
+
+
+app.mount("/mcp", archive_mcp_http_app)
+app.mount("/", archive_mcp_sse_app)

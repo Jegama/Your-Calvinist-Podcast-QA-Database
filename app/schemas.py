@@ -3,7 +3,7 @@ Pydantic schemas for API request/response models.
 """
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -100,6 +100,49 @@ class SearchResponse(BaseModel):
     query: str
     total: int
     results: list[SearchResult]
+
+
+class CitationOut(BaseModel):
+    question_id: str
+    youtube_id: Optional[str] = None
+    video_title: Optional[str] = None
+    timestamp_text: Optional[str] = None
+    timestamp_seconds: Optional[int] = None
+    question: str
+    excerpt: Optional[str] = None
+    source_url: Optional[str] = None
+
+
+class AskSourceOut(BaseModel):
+    id: str
+    youtube_id: str
+    video_title: Optional[str] = None
+    timestamp_text: Optional[str] = None
+    timestamp_seconds: int
+    question: str
+    answer_preview: Optional[str] = None
+    answer: Optional[str] = None
+    category: Optional[str] = None
+    subcategory: Optional[str] = None
+    tags: list[str] = Field(default_factory=list)
+    rank: Optional[float] = None
+    source_url: Optional[str] = None
+    citation: CitationOut
+
+
+class AskRequest(BaseModel):
+    question: str = Field(min_length=2)
+    mode: Literal["research", "answer"] = "answer"
+
+
+class AskResponse(BaseModel):
+    question: str
+    mode: Literal["research", "answer"]
+    answer: Optional[str] = None
+    sources: list[AskSourceOut] = Field(default_factory=list)
+    retrieved_candidates: int = 0
+    used_sources: int = 0
+    disclaimer: Optional[str] = None
 
 
 # --- Ingest Schemas ---

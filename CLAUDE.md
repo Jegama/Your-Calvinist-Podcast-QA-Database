@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 FastAPI application that extracts timestamped Q&A content from YourCalvinist Podcast YouTube videos, classifies them using Gemini AI, and serves searchable endpoints. Designed for serverless deployment on Vercel with Neon PostgreSQL.
 
+The app now also exposes an MCP server for LLM clients and a human-facing `POST /v1/ask` endpoint for archive Q&A.
+
 **Live API**: https://keithfoskey.calvinistparrot.com
 
 ## Development Commands
@@ -68,7 +70,7 @@ The `process_video()` function is the single source of truth for video processin
 - `ingest_jobs` - Lightweight queue for video processing (status: pending → processing → done/failed)
 
 **Full-text search**:
-- `qa_items.search_tsv` column (tsvector) - NOT in ORM, managed by trigger
+- `qa_items.search_tsv` column (tsvector) - declared in ORM and populated by Postgres trigger
 - Must apply DDL from `plan.md` Section 3 before search works
 - Trigger auto-updates `search_tsv` on insert/update using `to_tsvector('english', question || answer)`
 
@@ -120,10 +122,30 @@ Only serves videos with `status='processed'`:
 - `/v1/videos/{youtube_id}/questions` - Q&A for specific video
 - `/v1/questions` - browse all questions with category/subcategory/tag filters (AND logic for tags)
 - `/v1/questions/search?q=...` - full-text search using `plainto_tsquery` on `search_tsv`
+- `/v1/ask` - human-facing archive endpoint with request body `question` plus `mode`
+  - `mode="research"` returns retrieved sources only
+  - `mode="answer"` retrieves top matches and generates a grounded answer from the strongest full answers
 - `/v1/questions/{id}` - single question with full answer
 - `/v1/categories`, `/v1/subcategories`, `/v1/tags` - metadata endpoints
 
 **Filtering**: Tags are comma-separated for AND logic. Example: `?tags=Calvinism,Election`
+
+**Shared retrieval**:
+- Shared archive search and citation shaping live in `app/archive.py`
+- Search results and answer lookups now include structured citation objects with the direct YouTube timestamp URL
+
+### MCP API (`app/mcp_server.py`)
+
+The app also mounts an MCP server for LLM-facing access:
+- Streamable HTTP at `/mcp/` (preferred production transport)
+- SSE compatibility at `/sse`
+
+Tools:
+- `search_keith_archive`
+- `get_keith_answer`
+- `list_keith_topics`
+
+Prompts instruct clients to answer only from retrieved Keith Foskey archive material and to cite the returned source URLs.
 
 ### Configuration (`app/settings.py`)
 
@@ -137,6 +159,8 @@ Environment variables (via `.env`):
 - `ANSWER_PREVIEW_LENGTH` - default: 500 chars (for list views of 2-hour podcasts)
 
 `settings.validate()` warns if DATABASE_URL or GOOGLE_API_KEY missing.
+
+`GEMINI_API_KEY` is also required for `/v1/ask` answer mode and for any answer synthesis path; research mode and raw archive search do not need it.
 
 ### CORS (`app/main.py`)
 
@@ -203,6 +227,9 @@ https://www.youtube.com/watch?v={youtube_id}&t={timestamp_seconds}
 
 **Answer previews**: First 500 chars (configurable) for list views. Full answer available at `/v1/questions/{id}`.
 
+**Archive citations**:
+- REST `/v1/ask` and MCP archive retrieval return structured citations with question id, video title, timestamp metadata, excerpt, and the final timestamped YouTube link.
+
 ## Development Notes
 
 - No test suite present - use `/docs` interactive API or manual curl
@@ -211,3 +238,5 @@ https://www.youtube.com/watch?v={youtube_id}&t={timestamp_seconds}
 - Transcripts stored as JSONB to avoid YouTube API rate limits on re-runs
 - Classification can be re-run without re-fetching transcripts
 - Summary endpoint uses SQL aggregation - keep DB column names aligned with ORM changes
+- MCP is the LLM-facing interface; `/v1/ask` is the human-facing interface.
+- `/v1/questions/search` remains the low-level search endpoint; `/v1/ask` wraps shared retrieval in a question-oriented response contract.

@@ -7,9 +7,15 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, text, select
 
+from app.archive import search_archive
 from app.dependencies import get_db
 from app.db.models import Video, QAItem, Tag, QAItemTag
+from app.qa.ask import generate_grounded_answer
+from app.settings import get_settings
 from app.schemas import (
+    AskRequest,
+    AskResponse,
+    AskSourceOut,
     VideoOut,
     VideoDetailOut,
     VideoSummaryOut,
@@ -20,6 +26,72 @@ from app.schemas import (
 )
 
 router = APIRouter(prefix="/v1", tags=["public"])
+
+
+@router.post("/ask", response_model=AskResponse)
+def ask_archive(
+    payload: AskRequest,
+    db: Session = Depends(get_db),
+):
+    """Human-facing question answering endpoint backed by the archive."""
+    candidate_limit = 8 if payload.mode == "answer" else 6
+    include_answers = payload.mode == "answer"
+
+    result = search_archive(
+        db,
+        payload.question,
+        limit=candidate_limit,
+        include_answers=include_answers,
+    )
+
+    raw_sources = result["results"]
+    disclaimer = "Answers are grounded only in archived Keith Foskey material." if payload.mode == "answer" else "Research mode returns retrieved archive sources only."
+
+    if payload.mode == "research":
+        return AskResponse(
+            question=payload.question,
+            mode=payload.mode,
+            sources=[AskSourceOut.model_validate(item) for item in raw_sources],
+            retrieved_candidates=result["total"],
+            used_sources=len(raw_sources),
+            disclaimer=disclaimer,
+        )
+
+    settings = get_settings()
+    if not settings.GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Answer mode is unavailable because GEMINI_API_KEY is not configured",
+        )
+
+    answer_sources = [item for item in raw_sources if item.get("answer")][:3]
+    if not answer_sources:
+        return AskResponse(
+            question=payload.question,
+            mode=payload.mode,
+            answer="The archive does not contain a strong enough direct answer to respond reliably.",
+            sources=[AskSourceOut.model_validate(item) for item in raw_sources[:3]],
+            retrieved_candidates=result["total"],
+            used_sources=min(len(raw_sources), 3),
+            disclaimer=disclaimer,
+        )
+
+    generated_answer = generate_grounded_answer(payload.question, answer_sources)
+    if not generated_answer:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to generate grounded answer from retrieved sources",
+        )
+
+    return AskResponse(
+        question=payload.question,
+        mode=payload.mode,
+        answer=generated_answer,
+        sources=[AskSourceOut.model_validate(item) for item in answer_sources],
+        retrieved_candidates=result["total"],
+        used_sources=len(answer_sources),
+        disclaimer=disclaimer,
+    )
 
 
 # --- Video Endpoints ---
