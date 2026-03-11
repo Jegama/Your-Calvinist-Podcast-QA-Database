@@ -10,6 +10,47 @@ from app.settings import get_settings
 logger = logging.getLogger(__name__)
 
 
+async def extract_search_query(question: str) -> str:
+    """Use Gemini to distill a natural-language question into concise search keywords."""
+    settings = get_settings()
+    if not settings.GEMINI_API_KEY:
+        return question
+
+    try:
+        import warnings
+        from google import genai
+        from google.genai import types
+
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+        response = await client.aio.models.generate_content(
+            model="gemini-3-flash-preview",
+            contents=(
+                "Extract the core search keywords from the following question. "
+                "Return ONLY the keywords separated by spaces — no explanation, "
+                "no punctuation, no quotes. Remove names like 'Keith Foskey', "
+                "filler words, and meta-phrases like 'what does he think about'. "
+                "Keep theological terms, topic nouns, and any specific Bible references.\n\n"
+                f"Question: {question}\n"
+                "Keywords:"
+            ),
+            config=types.GenerateContentConfig(
+                temperature=0.0,
+                max_output_tokens=60,
+            ),
+        )
+
+        text = (response.text or "").strip()
+        if text:
+            return text
+    except Exception as e:
+        logger.warning("Gemini keyword extraction failed, using raw question: %s", e)
+
+    return question
+
+
 async def generate_grounded_answer(question: str, sources: list[dict]) -> Optional[str]:
     """Generate a grounded answer using only retrieved archive sources."""
     settings = get_settings()

@@ -76,7 +76,10 @@ archive_mcp = FastMCP(
         "Use this server to search Keith Foskey's archived podcast Q&A. "
         "Search before answering, read the full answer for the strongest hits, "
         "and answer only from retrieved material. If the archive does not address "
-        "the question, say so clearly and do not invent a position."
+        "the question, say so clearly and do not invent a position.\n\n"
+        "IMPORTANT: Every result includes a citation.source_url that links directly "
+        "to the exact timestamp in the YouTube video. You MUST include these URLs "
+        "as clickable citations in your response so users can watch Keith's original answer."
     ),
 )
 
@@ -118,6 +121,8 @@ def search_keith_archive(
     Results are ranked by relevance. Set include_answers=True to get full answer
     text inline (useful when you need content without a follow-up get_keith_answer call).
     Tags are comma-separated for AND logic, e.g. 'Calvinism,Election'.
+
+    Each result includes citation.source_url — always cite these URLs in your response.
     """
     with get_session() as session:
         result = search_archive(

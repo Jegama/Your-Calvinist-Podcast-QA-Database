@@ -123,6 +123,7 @@ Only serves videos with `status='processed'`:
 - `/v1/questions` - browse all questions with category/subcategory/tag filters (AND logic for tags)
 - `/v1/questions/search?q=...` - full-text search using `plainto_tsquery` on `search_tsv`
 - `/v1/ask` - human-facing archive endpoint with request body `question` plus `mode`
+  - Both modes first call Gemini to extract search keywords from the natural-language question (`extract_search_query` in `app/qa/ask.py`), then pass the keywords to `search_archive`. This mirrors how MCP clients naturally distill queries before calling tools.
   - `mode="research"` returns retrieved sources only
   - `mode="answer"` retrieves top matches and generates a grounded answer from the strongest full answers
 - `/v1/questions/{id}` - single question with full answer
@@ -165,7 +166,7 @@ Environment variables (via `.env`):
 
 `settings.validate()` warns if DATABASE_URL or GOOGLE_API_KEY missing.
 
-`GEMINI_API_KEY` is also required for `/v1/ask` answer mode and for any answer synthesis path; research mode and raw archive search do not need it.
+`GEMINI_API_KEY` is also required for `/v1/ask` (both modes use it for keyword extraction; answer mode additionally uses it for answer synthesis). Without it, `/v1/ask` falls back to raw question text for search, and answer mode returns 503.
 
 ### CORS (`app/main.py`)
 
@@ -244,4 +245,5 @@ https://www.youtube.com/watch?v={youtube_id}&t={timestamp_seconds}
 - Classification can be re-run without re-fetching transcripts
 - Summary endpoint uses SQL aggregation - keep DB column names aligned with ORM changes
 - MCP is the LLM-facing interface; `/v1/ask` is the human-facing interface.
-- `/v1/questions/search` remains the low-level search endpoint; `/v1/ask` wraps shared retrieval in a question-oriented response contract.
+- `/v1/questions/search` remains the low-level search endpoint (raw `plainto_tsquery`); `/v1/ask` uses Gemini to extract keywords first, then searches.
+- Keyword extraction (`app/qa/ask.py:extract_search_query`) uses Gemini Flash with `temperature=0` and `max_output_tokens=60` for fast, deterministic results. Falls back to raw question text on failure.

@@ -10,7 +10,7 @@ from sqlalchemy import func, text, select
 from app.archive import search_archive
 from app.dependencies import get_db
 from app.db.models import Video, QAItem, Tag, QAItemTag
-from app.qa.ask import generate_grounded_answer
+from app.qa.ask import extract_search_query, generate_grounded_answer
 from app.settings import get_settings
 from app.schemas import (
     AskRequest,
@@ -36,10 +36,11 @@ async def ask_archive(
     """Human-facing question answering endpoint backed by the archive."""
     candidate_limit = 8 if payload.mode == "answer" else 6
     include_answers = payload.mode == "answer"
+    search_query = await extract_search_query(payload.question)
 
     result = search_archive(
         db,
-        payload.question,
+        search_query,
         limit=candidate_limit,
         include_answers=include_answers,
     )

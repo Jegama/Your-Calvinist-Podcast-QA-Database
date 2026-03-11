@@ -124,7 +124,7 @@ https://keithfoskey.calvinistparrot.com
 | `GET /v1/questions` | **Browse all questions** with category/tag filtering |
 | `GET /v1/questions/search?q=...` | Full-text search across all Q&A |
 | `GET /v1/questions/{question_id}` | Get a single question with full answer |
-| `POST /v1/ask` | Human-facing archive Q&A in `research` or `answer` mode |
+| `POST /v1/ask` | Human-facing archive Q&A — uses Gemini to extract search keywords, then retrieves in `research` or `answer` mode |
 | `GET /v1/categories` | List all categories |
 | `GET /v1/subcategories` | List all subcategories (filterable by category) |
 | `GET /v1/tags` | List all tags by popularity |
@@ -181,6 +181,8 @@ Response:
 ```
 
 ### Example: Ask The Archive
+
+The `/v1/ask` endpoint accepts natural-language questions. It uses Gemini to extract search keywords (e.g. "What does Keith say about infant baptism?" becomes "infant baptism"), then searches the archive.
 
 Research mode returns retrieved sources only:
 
