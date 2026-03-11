@@ -10,11 +10,18 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from mcp.server.transport_security import TransportSecuritySettings
+
 from app.mcp_server import archive_mcp
 from app.settings import get_settings
 from app.routers import public_router, ingest_router
 
 
+# Disable DNS rebinding protection — this is a public, open-access MCP server
+# with read-only tools. Any MCP client should be able to connect.
+archive_mcp.settings.transport_security = TransportSecuritySettings(
+    enable_dns_rebinding_protection=False,
+)
 archive_mcp.settings.streamable_http_path = "/"
 archive_mcp_http_app = archive_mcp.streamable_http_app()
 archive_mcp_sse_app = archive_mcp.sse_app()  # legacy SSE transport
