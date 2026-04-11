@@ -137,15 +137,17 @@ def get_raw_transcript(video_id: str) -> Optional[list[TranscriptSegment]]:
 def transcript_to_raw_data(segments: list[TranscriptSegment]) -> list[dict]:
     """
     Convert TranscriptSegment list to JSON-serializable format for DB storage.
-    
+
     Args:
         segments: List of TranscriptSegment objects
-        
+
     Returns:
-        List of dicts with start and text keys
+        List of dicts with start, duration, and text keys. Duration is
+        persisted so reprocess-from-stored can compute accurate time windows
+        (the slicer uses start + duration to bound the final question).
     """
     return [
-        {"start": seg.start, "text": seg.text}
+        {"start": seg.start, "duration": seg.duration, "text": seg.text}
         for seg in segments
     ]
 

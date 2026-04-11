@@ -15,6 +15,10 @@ class Classification(BaseModel):
     category: str = Field(description="The main category from the provided list.")
     subcategory: str = Field(description="The subcategory from the provided list.")
     tags: List[str] = Field(description="A list of relevant tags or topics.")
+    passages: List[str] = Field(
+        default_factory=list,
+        description="Bible passages explicitly cited or discussed (e.g., 'Romans 9:10-13', 'Genesis 3'). Empty list if none.",
+    )
 
 
 def load_categories(filepath: str = "categories.json") -> dict:
@@ -58,13 +62,9 @@ def classify_question(
         return None
     
     try:
-        import warnings
         from google import genai
-        
-        # Suppress "Both GOOGLE_API_KEY and GEMINI_API_KEY are set" warning
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
         
         # Load categories if not provided
         if categories_context is None:
@@ -82,6 +82,7 @@ The answer text comes from auto-generated YouTube transcripts and may include:
 - Banter between Keith and his wife Jennifer - may be conversational filler
 - Gospel presentations (standard segment in each episode) - classify appropriately if relevant
 - References to other content creators, debates, or church events
+- Garbled book names in auto-transcripts (e.g., "first Timothy" instead of "1 Timothy", "song of Solomon" instead of "Song of Solomon") — normalize to standard book names.
 
 Focus on the THEOLOGICAL or PRACTICAL SUBSTANCE of the answer, ignoring promotional content and casual banter.
 
@@ -99,8 +100,10 @@ Given the question and answer below, provide:
 3. **tags**: Generate 2-5 specific, searchable tags that capture the key topics discussed. These can be:
    - Specific theological terms (e.g., "penal substitutionary atonement", "infant baptism")
    - Names of theologians or figures mentioned (e.g., "John Calvin", "James White")
-   - Specific Bible books or passages discussed
    - Practical topics (e.g., "sermon preparation", "church membership")
+   - Do NOT include Bible passage references here — use the passages field instead.
+
+4. **passages**: List any specific Bible passages (book + chapter, or book + chapter:verse(s)) that are explicitly cited, quoted, or substantively discussed in the answer. Use standard book names and formatting (e.g., "Romans 9:10-13", "1 John 2:15-17", "Genesis 3", "Psalm 119:105"). If no specific passages are cited, return an empty list. Do NOT include vague references like "the Bible says" — only specific citations.
 
 ## QUESTION
 {question_text}
@@ -165,10 +168,12 @@ def classify_batch(
             item['category'] = classification.category
             item['subcategory'] = classification.subcategory
             item['tags'] = classification.tags
+            item['passages'] = classification.passages
         else:
             item['category'] = None
             item['subcategory'] = None
             item['tags'] = []
+            item['passages'] = []
         
         results.append(item)
     

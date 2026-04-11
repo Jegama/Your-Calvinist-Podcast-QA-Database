@@ -37,6 +37,12 @@ python -m app.cli.backfill --input playlist_videos.txt --dry-run
 
 # Process limited number with delay
 python -m app.cli.backfill --input playlist_videos.txt --limit 5 --delay 2
+
+# Re-process all videos from stored transcripts (no YouTube API calls)
+python -m app.cli.backfill --from-stored
+
+# Re-process with limit
+python -m app.cli.backfill --from-stored --limit 5 --delay 2
 ```
 
 ### Manual Timestamp Ingestion
@@ -49,7 +55,8 @@ python -m app.cli.ingest_manual_timestamps
 
 ### Core Pipeline Flow (`app/ingest/pipeline.py`)
 
-The `process_video()` function is the single source of truth for video processing:
+The `process_video()` function is the single source of truth for video processing.
+`reprocess_from_stored_transcript()` re-processes from stored DB transcripts without YouTube API calls (for re-classification).
 
 1. **Extract video ID** via `app/youtube/ids.py` - handles both IDs and URLs
 2. **Fetch metadata** via YouTube Data API (`app/youtube/metadata.py`)
@@ -64,7 +71,7 @@ The `process_video()` function is the single source of truth for video processin
 
 **Key tables** (see `app/db/models.py`):
 - `videos` - YouTube video metadata and processing status
-- `qa_items` - Question-answer pairs with timestamps (unique on `video_id, timestamp_seconds`)
+- `qa_items` - Question-answer pairs with timestamps (unique on `video_id, timestamp_seconds`), includes `passages TEXT[]` for cited Bible passages
 - `tags` - Tag names (many-to-many with qa_items)
 - `transcripts` - Raw JSONB transcript segments + full text (kept separate for performance)
 - `ingest_jobs` - Lightweight queue for video processing (status: pending → processing → done/failed)
@@ -73,6 +80,10 @@ The `process_video()` function is the single source of truth for video processin
 - `qa_items.search_tsv` column (tsvector) - declared in ORM and populated by Postgres trigger
 - Must apply DDL from `plan.md` Section 3 before search works
 - Trigger auto-updates `search_tsv` on insert/update using `to_tsvector('english', question || answer)`
+
+**Schema migrations**:
+- Ad-hoc SQL lives in `migrations/`; apply manually against Neon with `psql "$DATABASE_URL" -f migrations/<file>.sql`
+- `001_add_passages_column.sql` — adds `qa_items.passages TEXT[]`. Apply before deploying code that writes to this column.
 
 ### Database Access Patterns
 
@@ -157,14 +168,14 @@ Prompts instruct clients to answer only from retrieved Keith Foskey archive mate
 
 Environment variables (via `.env`):
 - `DATABASE_URL` - Neon PostgreSQL connection string (required)
-- `GOOGLE_API_KEY` - YouTube Data API key (required)
+- `YOUTUBE_API_KEY` - YouTube Data API key (required).
 - `GEMINI_API_KEY` - Gemini classification (optional, skip with `skip_classification=True`)
 - `ADMIN_API_KEY` - protects ingestion endpoints
 - `CRON_SECRET` - Vercel cron authentication
 - `PLAYLIST_ID` - default: YourCalvinist Live Q&A playlist
 - `ANSWER_PREVIEW_LENGTH` - default: 500 chars (for list views of 2-hour podcasts)
 
-`settings.validate()` warns if DATABASE_URL or GOOGLE_API_KEY missing.
+`settings.validate()` warns if DATABASE_URL or YOUTUBE_API_KEY missing.
 
 `GEMINI_API_KEY` is also required for `/v1/ask` (both modes use it for keyword extraction; answer mode additionally uses it for answer synthesis). Without it, `/v1/ask` falls back to raw question text for search, and answer mode returns 503.
 
@@ -188,6 +199,7 @@ Gemini 3 Flash classifies Q&A into structured taxonomy from `categories.json`:
 - Category (e.g., "Theology")
 - Subcategory (e.g., "Soteriology")
 - Tags (e.g., ["Calvinism", "Election"])
+- Passages (e.g., ["Romans 9:10-13", "Genesis 3"]) — Bible passages cited or discussed
 
 Classification is optional - set `GEMINI_API_KEY` or use `skip_classification=True` to bypass.
 

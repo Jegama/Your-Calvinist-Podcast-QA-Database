@@ -21,7 +21,7 @@ from dataclasses import dataclass, field
 
 from app.settings import get_settings
 from app.youtube.ids import get_video_id
-from app.ingest.pipeline import process_video, ProcessResult
+from app.ingest.pipeline import process_video, ProcessResult, reprocess_all_from_stored
 from app.db.engine import get_session
 from app.db import crud
 
@@ -197,54 +197,111 @@ def main():
         help="Seconds to wait between videos (default: 1.0)"
     )
     parser.add_argument(
+        "--from-stored",
+        action="store_true",
+        help="Re-process videos using stored transcripts (no YouTube API calls). "
+             "Use this for re-classification with updated prompts."
+    )
+    parser.add_argument(
         "--check-config",
         action="store_true",
         help="Just check configuration and exit"
     )
     
     args = parser.parse_args()
-    
+
+    # --dry-run has no effect in --from-stored mode (reprocess writes directly
+    # to the existing video rows). Reject the combination up front rather than
+    # silently mutating the DB.
+    if args.from_stored and args.dry_run:
+        print(
+            "Error: --dry-run is not supported with --from-stored "
+            "(reprocessing writes directly to existing rows)."
+        )
+        sys.exit(2)
+
     # Check configuration
     settings = get_settings()
-    missing = settings.validate()
-    
-    if missing:
-        print("Configuration errors:")
-        for key in missing:
-            print(f"  Missing: {key}")
-        sys.exit(1)
+    # --from-stored only needs DATABASE_URL (and optionally GEMINI_API_KEY),
+    # not YOUTUBE_API_KEY since it skips YouTube API calls entirely.
+    if args.from_stored:
+        if not settings.DATABASE_URL:
+            print("Configuration error: Missing DATABASE_URL")
+            sys.exit(1)
+    else:
+        missing = settings.validate()
+        if missing:
+            print("Configuration errors:")
+            for key in missing:
+                print(f"  Missing: {key}")
+            sys.exit(1)
     
     if args.check_config:
         print("Configuration OK!")
         print(f"  DATABASE_URL: {'set' if settings.DATABASE_URL else 'not set'}")
-        print(f"  GOOGLE_API_KEY: {'set' if settings.GOOGLE_API_KEY else 'not set'}")
+        print(f"  YOUTUBE_API_KEY: {'set' if settings.YOUTUBE_API_KEY else 'not set'}")
         print(f"  GEMINI_API_KEY: {'set' if settings.GEMINI_API_KEY else 'not set'}")
         sys.exit(0)
     
-    # Read URLs
-    urls = read_video_urls(args.file)
-    if not urls:
-        print(f"No URLs found in {args.file}")
-        sys.exit(1)
-    
-    # Run backfill
-    try:
-        stats = run_backfill(
-            urls=urls,
-            skip_classification=args.skip_classification,
-            limit=args.limit,
-            dry_run=args.dry_run,
-            delay=args.delay,
-            skip_processed=args.skip_processed,
-        )
-        stats.print_summary()
-        
-        # Exit with error if any failures
-        sys.exit(1 if stats.failed > 0 else 0)
-        
-    except KeyboardInterrupt:
-        print("\n\nBackfill interrupted by user.")
-        sys.exit(130)
+    if args.from_stored:
+        # Re-process from stored transcripts (no YouTube API calls)
+        try:
+            results = reprocess_all_from_stored(
+                skip_classification=args.skip_classification,
+                limit=args.limit,
+                delay=args.delay,
+                verbose=True,
+            )
+
+            # Print summary
+            successful = sum(1 for r in results if r.success)
+            failed = sum(1 for r in results if not r.success)
+            total_qs = sum(r.questions_saved for r in results)
+
+            print("\n" + "=" * 60)
+            print("RE-PROCESS SUMMARY (from stored transcripts)")
+            print("=" * 60)
+            print(f"Total videos:            {len(results)}")
+            print(f"  Successful:            {successful}")
+            print(f"  Failed:                {failed}")
+            print(f"Total Q&A items saved:   {total_qs}")
+
+            if failed:
+                print("\nErrors:")
+                for r in results:
+                    if not r.success:
+                        print(f"  {r.youtube_id}: {r.error}")
+
+            sys.exit(1 if failed > 0 else 0)
+
+        except KeyboardInterrupt:
+            print("\n\nRe-process interrupted by user.")
+            sys.exit(130)
+    else:
+        # Read URLs
+        urls = read_video_urls(args.file)
+        if not urls:
+            print(f"No URLs found in {args.file}")
+            sys.exit(1)
+
+        # Run backfill
+        try:
+            stats = run_backfill(
+                urls=urls,
+                skip_classification=args.skip_classification,
+                limit=args.limit,
+                dry_run=args.dry_run,
+                delay=args.delay,
+                skip_processed=args.skip_processed,
+            )
+            stats.print_summary()
+
+            # Exit with error if any failures
+            sys.exit(1 if stats.failed > 0 else 0)
+
+        except KeyboardInterrupt:
+            print("\n\nBackfill interrupted by user.")
+            sys.exit(130)
 
 
 if __name__ == "__main__":

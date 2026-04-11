@@ -229,15 +229,18 @@ def process_video_with_manual_timestamps(
                 qa.category = classification.category
                 qa.subcategory = classification.subcategory
                 qa.tags = classification.tags
+                qa.passages = classification.passages
             else:
                 qa.category = None
                 qa.subcategory = None
                 qa.tags = []
+                qa.passages = []
     else:
         for qa in qa_matches:
             qa.category = None
             qa.subcategory = None
             qa.tags = []
+            qa.passages = []
     
     # Step 6: Save to database (unless dry run)
     if dry_run:
@@ -287,7 +290,8 @@ def process_video_with_manual_timestamps(
                     answer_preview=qa.answer_preview,
                     category=qa.category,
                     subcategory=qa.subcategory,
-                    tags=qa.tags or [],
+                    tags=qa.tags,
+                    passages=qa.passages,
                 )
             
             # Mark as processed
@@ -443,7 +447,7 @@ def main():
     if args.check_config:
         print("Configuration OK!")
         print(f"  DATABASE_URL: {'set' if settings.DATABASE_URL else 'not set'}")
-        print(f"  GOOGLE_API_KEY: {'set' if settings.GOOGLE_API_KEY else 'not set'}")
+        print(f"  YOUTUBE_API_KEY: {'set' if settings.YOUTUBE_API_KEY else 'not set'}")
         print(f"  GEMINI_API_KEY: {'set' if settings.GEMINI_API_KEY else 'not set'}")
         sys.exit(0)
     

@@ -35,6 +35,7 @@ class ArchiveSearchHit(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    passages: list[str] = Field(default_factory=list)
     rank: Optional[float] = None
     source_url: Optional[str] = None
     citation: ArchiveCitation
@@ -56,6 +57,7 @@ class ArchiveAnswerDetail(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    passages: list[str] = Field(default_factory=list)
     video_youtube_id: Optional[str] = None
     video_title: Optional[str] = None
     source_url: Optional[str] = None
@@ -77,9 +79,16 @@ archive_mcp = FastMCP(
         "Search before answering, read the full answer for the strongest hits, "
         "and answer only from retrieved material. If the archive does not address "
         "the question, say so clearly and do not invent a position.\n\n"
-        "IMPORTANT: Every result includes a citation.source_url that links directly "
-        "to the exact timestamp in the YouTube video. You MUST include these URLs "
-        "as clickable citations in your response so users can watch Keith's original answer."
+        "CITATION FORMAT (MANDATORY):\n"
+        "Every result includes a citation.source_url that links directly "
+        "to the exact timestamp in the YouTube video. You MUST cite every source "
+        "using this exact Markdown format:\n\n"
+        "  [Question text](source_url)\n\n"
+        "Example:\n"
+        "  [What is the biblical basis for elder-led congregationalism?]"
+        "(https://www.youtube.com/watch?v=abc123&t=1425)\n\n"
+        "Use the citation.question field as the link text and citation.source_url as the URL. "
+        "Do NOT use footnote-style or prose-style citations. Always use inline Markdown links."
     ),
 )
 
@@ -113,6 +122,7 @@ def search_keith_archive(
     category: Optional[str] = None,
     subcategory: Optional[str] = None,
     tags: Optional[str] = None,
+    passage: Optional[str] = None,
     include_answers: bool = False,
 ) -> ArchiveSearchResponse:
     """Search Keith Foskey's archived Q&A by keyword with optional topic filters.
@@ -121,8 +131,10 @@ def search_keith_archive(
     Results are ranked by relevance. Set include_answers=True to get full answer
     text inline (useful when you need content without a follow-up get_keith_answer call).
     Tags are comma-separated for AND logic, e.g. 'Calvinism,Election'.
+    Use passage to filter by a specific Bible passage, e.g. 'Romans 9'.
 
-    Each result includes citation.source_url — always cite these URLs in your response.
+    CITATION FORMAT: For each result you use, cite as a Markdown link:
+      [result.citation.question](result.citation.source_url)
     """
     with get_session() as session:
         result = search_archive(
@@ -131,6 +143,7 @@ def search_keith_archive(
             category=category,
             subcategory=subcategory,
             tags=tags,
+            passage=passage,
             limit=max(1, min(limit, 10)),
             include_answers=include_answers,
         )
@@ -143,6 +156,9 @@ def get_keith_answer(question_id: str) -> ArchiveAnswerDetail:
 
     Call this after search_keith_archive to retrieve the complete answer text
     for the most relevant hits. The question_id comes from search results.
+
+    When citing this answer, use the Markdown link format:
+      [result.citation.question](result.citation.source_url)
     """
     with get_session() as session:
         result = get_archive_answer(session, question_id)
@@ -168,8 +184,12 @@ def answer_from_keith_archive(user_question: str) -> str:
     return (
         "Answer the user's question using only Keith Foskey archive material from this MCP server. "
         "First call search_keith_archive with the user's question. Then read the full answer for the most relevant "
-        "1-3 results with get_keith_answer. Synthesize only what is supported by those retrieved answers. "
-        "Cite the citation.source_url for each substantive claim and preserve the linked timestamp. "
+        "1-3 results with get_keith_answer. Synthesize only what is supported by those retrieved answers.\n\n"
+        "CITATION FORMAT: For every substantive claim, include an inline Markdown citation link using "
+        "the question text as link text and citation.source_url as the URL:\n"
+        "  [Question text](https://www.youtube.com/watch?v=VIDEO_ID&t=SECONDS)\n\n"
+        "Example: Keith argues that baptism is for believers only "
+        "[Is infant baptism biblical?](https://www.youtube.com/watch?v=abc123&t=300).\n\n"
         "If the archive does not directly address the question, say that clearly.\n\n"
         f"User question: {user_question}"
     )
@@ -180,7 +200,9 @@ def find_keith_answer_with_citations(user_question: str) -> str:
     return (
         "Find the best direct answer Keith Foskey has already given in the archive. "
         "Call search_keith_archive with the user's exact question, then inspect the strongest results with get_keith_answer. "
-        "Return a short answer followed by explicit citations using citation.source_url. "
+        "Return a short answer followed by explicit citations.\n\n"
+        "CITATION FORMAT: Use Markdown links with the question as link text:\n"
+        "  [Question text](citation.source_url)\n\n"
         "Do not answer beyond what the retrieved material supports.\n\n"
         f"User question: {user_question}"
     )
@@ -191,6 +213,8 @@ def summarize_keith_position_carefully(topic: str) -> str:
     return (
         "Summarize Keith Foskey's position on the requested topic using only archived Q&A material. "
         "Search broadly, inspect at least two relevant full answers when available, and distinguish between direct statements and inference. "
-        "If the archive is thin or conflicting, say so explicitly. Include citations using citation.source_url.\n\n"
+        "If the archive is thin or conflicting, say so explicitly.\n\n"
+        "CITATION FORMAT: Use Markdown links with the question as link text:\n"
+        "  [Question text](citation.source_url)\n\n"
         f"Topic: {topic}"
     )

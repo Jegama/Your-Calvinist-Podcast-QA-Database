@@ -17,13 +17,10 @@ async def extract_search_query(question: str) -> str:
         return question
 
     try:
-        import warnings
         from google import genai
         from google.genai import types
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
         response = await client.aio.models.generate_content(
             model="gemini-3-flash-preview",
@@ -61,13 +58,10 @@ async def generate_grounded_answer(question: str, sources: list[dict]) -> Option
         return None
 
     try:
-        import warnings
         from google import genai
         from google.genai import types
 
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            client = genai.Client(api_key=settings.GEMINI_API_KEY)
+        client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
         formatted_sources = []
         for index, source in enumerate(sources, start=1):

@@ -58,6 +58,7 @@ def search_archive(
     category: Optional[str] = None,
     subcategory: Optional[str] = None,
     tags: Optional[str] = None,
+    passage: Optional[str] = None,
     limit: int = 5,
     offset: int = 0,
     include_answers: bool = False,
@@ -78,6 +79,7 @@ def search_archive(
             q.answer_preview,
             q.category,
             q.subcategory,
+            q.passages,
             v.youtube_id,
             v.published_at,
             v.title AS video_title,
@@ -117,8 +119,12 @@ def search_archive(
         )
         params[param_name] = tag_name
 
+    if passage:
+        base_sql += " AND EXISTS (SELECT 1 FROM unnest(q.passages) p WHERE p ILIKE :passage_pattern)"
+        params["passage_pattern"] = f"{passage}%"
+
     base_sql += """
-        GROUP BY q.id, v.youtube_id, v.title, v.published_at
+        GROUP BY q.id, v.youtube_id, v.title, v.published_at, q.passages
         ORDER BY rank DESC, v.published_at DESC, q.timestamp_seconds
         LIMIT :limit OFFSET :offset
     """
@@ -152,6 +158,10 @@ def search_archive(
         )
         count_params[param_name] = tag_name
 
+    if passage:
+        count_sql += " AND EXISTS (SELECT 1 FROM unnest(q.passages) p WHERE p ILIKE :passage_pattern)"
+        count_params["passage_pattern"] = f"{passage}%"
+
     rows = session.execute(text(base_sql), params)
     total = session.execute(text(count_sql), count_params).scalar() or 0
 
@@ -177,6 +187,7 @@ def search_archive(
             "category": row.category,
             "subcategory": row.subcategory,
             "tags": row.tags or [],
+            "passages": row.passages or [],
             "rank": float(row.rank) if row.rank is not None else None,
             "source_url": citation["source_url"],
             "citation": citation,
@@ -233,6 +244,7 @@ def get_archive_answer(session: Session, question_id: str) -> Optional[dict]:
         "category": qa_item.category,
         "subcategory": qa_item.subcategory,
         "tags": [tag.name for tag in qa_item.tags],
+        "passages": qa_item.passages or [],
         "video_youtube_id": video.youtube_id if video else None,
         "video_title": video.title if video else None,
         "source_url": citation["source_url"],

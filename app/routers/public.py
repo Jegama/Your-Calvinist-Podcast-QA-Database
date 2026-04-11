@@ -263,8 +263,9 @@ def get_video_questions(
             category=getattr(item, 'category'),
             subcategory=getattr(item, 'subcategory'),
             tags=[getattr(t, 'name') for t in item.tags],
+            passages=getattr(item, 'passages') or [],
         ))
-    
+
     return results
 
 
@@ -275,6 +276,7 @@ def list_questions(
     category: Optional[str] = Query(default=None, description="Filter by category"),
     subcategory: Optional[str] = Query(default=None, description="Filter by subcategory"),
     tags: Optional[str] = Query(default=None, description="Filter by tags (comma-separated, AND logic)"),
+    passage: Optional[str] = Query(default=None, description="Filter by Bible passage"),
     limit: int = Query(default=50, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: Session = Depends(get_db),
@@ -288,12 +290,16 @@ def list_questions(
     - **category**: Filter by category (e.g., "Theology")
     - **subcategory**: Filter by subcategory (e.g., "Soteriology")
     - **tags**: Comma-separated list of tags (AND logic - must have ALL tags)
-    
+    - **passage**: Filter by Bible passage. Case-insensitive prefix match
+      against any entry in `qa_items.passages`, so "Romans 9" matches
+      "Romans 9:10-13".
+
     Examples:
     - `/v1/questions?category=Theology`
     - `/v1/questions?category=Theology&subcategory=Soteriology`
     - `/v1/questions?tags=Calvinism,Election`
     - `/v1/questions?category=Theology&tags=baptism`
+    - `/v1/questions?passage=Romans 9`
     """
     # Only get questions from processed videos
     query = db.query(QAItem).join(Video).filter(Video.status == "processed")
@@ -319,11 +325,17 @@ def list_questions(
                 .exists()
             )
             query = query.filter(tag_exists)
-    
+
+    # Apply passage filter (prefix match so "Romans 9" matches "Romans 9:10-13")
+    if passage:
+        query = query.filter(
+            text("EXISTS (SELECT 1 FROM unnest(qa_items.passages) p WHERE p ILIKE :passage_pattern)")
+        ).params(passage_pattern=f"{passage}%")
+
     # Order by most recent video first, then by timestamp
     query = query.order_by(Video.published_at.desc(), QAItem.timestamp_seconds)
     qa_items = query.offset(offset).limit(limit).all()
-    
+
     # Convert to response model
     results = []
     for item in qa_items:
@@ -336,8 +348,9 @@ def list_questions(
             category=getattr(item, 'category'),
             subcategory=getattr(item, 'subcategory'),
             tags=[getattr(t, 'name') for t in item.tags],
+            passages=getattr(item, 'passages') or [],
         ))
-    
+
     return results
 
 
@@ -366,7 +379,7 @@ def search_questions(
     """
     # Build the search query using raw SQL for ranking
     base_sql = """
-        SELECT 
+        SELECT
             q.id,
             q.timestamp_text,
             q.timestamp_seconds,
@@ -374,6 +387,7 @@ def search_questions(
             q.answer_preview,
             q.category,
             q.subcategory,
+            q.passages,
             v.youtube_id,
             v.title as video_title,
             ts_rank(q.search_tsv, plainto_tsquery('english', :query)) as rank,
@@ -406,7 +420,7 @@ def search_questions(
             params[param_name] = tag_name
     
     base_sql += """
-        GROUP BY q.id, v.youtube_id, v.title
+        GROUP BY q.id, v.youtube_id, v.title, q.passages
         ORDER BY rank DESC
         LIMIT :limit OFFSET :offset
     """
@@ -454,6 +468,7 @@ def search_questions(
             category=row.category,
             subcategory=row.subcategory,
             tags=row.tags or [],
+            passages=row.passages or [],
             rank=row.rank,
         ))
     
@@ -493,6 +508,7 @@ def get_question(
         category=getattr(qa_item, 'category'),
         subcategory=getattr(qa_item, 'subcategory'),
         tags=[getattr(t, 'name') for t in qa_item.tags],
+        passages=getattr(qa_item, 'passages') or [],
         video_youtube_id=getattr(video, 'youtube_id') if video else None,
         video_title=getattr(video, 'title') if video else None,
     )

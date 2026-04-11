@@ -249,7 +249,7 @@ Visit the interactive docs at `/docs` to explore all endpoints, try them live, a
 5. Fill in your `.env` file:
    ```env
    DATABASE_URL=postgresql://user:pass@host/db
-   GOOGLE_API_KEY=your_youtube_api_key
+   YOUTUBE_API_KEY=your_youtube_api_key
    GEMINI_API_KEY=your_gemini_api_key
    ADMIN_API_KEY=your_admin_key
    CRON_SECRET=your_cron_secret

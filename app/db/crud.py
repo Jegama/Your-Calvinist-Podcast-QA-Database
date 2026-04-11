@@ -130,6 +130,7 @@ def upsert_qa_item(
     category: Optional[str] = None,
     subcategory: Optional[str] = None,
     tags: Optional[list[str]] = None,
+    passages: Optional[list[str]] = None,
 ) -> QAItem:
     """
     Insert or update a Q&A item.
@@ -148,8 +149,11 @@ def upsert_qa_item(
         setattr(qa_item, "answer_preview", answer_preview)
         setattr(qa_item, "category", category)
         setattr(qa_item, "subcategory", subcategory)
+        # Passages: None = leave untouched, [] = clear, [...] = replace.
+        if passages is not None:
+            setattr(qa_item, "passages", passages)
     else:
-        # Insert new
+        # Insert new. Column is NOT NULL; default to [] when caller passes None.
         qa_item = QAItem(
             video_id=video_id,
             timestamp_text=timestamp_text,
@@ -159,17 +163,20 @@ def upsert_qa_item(
             answer_preview=answer_preview,
             category=category,
             subcategory=subcategory,
+            passages=passages if passages is not None else [],
         )
         session.add(qa_item)
-    
+
     session.flush()
-    
-    # Handle tags
-    if tags:
-        tag_objects = get_or_create_tags(session, tags)
+
+    # Handle tags. Pass None to leave existing tags untouched; pass a list
+    # (including []) to replace them. An empty list clears stale tags on
+    # reprocess/reclassification.
+    if tags is not None:
+        tag_objects = get_or_create_tags(session, tags) if tags else []
         setattr(qa_item, "tags", tag_objects)
         session.flush()
-    
+
     return qa_item
 
 
@@ -204,6 +211,7 @@ def bulk_upsert_qa_items(
             category=item.get("category"),
             subcategory=item.get("subcategory"),
             tags=item.get("tags"),
+            passages=item.get("passages"),
         )
         results.append(qa)
     return results

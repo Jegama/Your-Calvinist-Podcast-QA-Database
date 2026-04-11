@@ -21,6 +21,7 @@ class QAMatch:
     category: Optional[str] = None
     subcategory: Optional[str] = None
     tags: Optional[list[str]] = None
+    passages: Optional[list[str]] = None
 
 
 def slice_answers_by_timestamps(

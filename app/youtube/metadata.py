@@ -34,11 +34,11 @@ def get_video_metadata(video_id: str) -> Optional[VideoMetadata]:
     """
     settings = get_settings()
     
-    if not settings.GOOGLE_API_KEY:
-        raise ValueError("GOOGLE_API_KEY not configured")
-    
+    if not settings.YOUTUBE_API_KEY:
+        raise ValueError("YOUTUBE_API_KEY not configured")
+
     try:
-        youtube = build('youtube', 'v3', developerKey=settings.GOOGLE_API_KEY)
+        youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)
         
         request = youtube.videos().list(
             part="snippet",

@@ -3,7 +3,7 @@ SQLAlchemy ORM models matching the Neon database schema.
 """
 
 from sqlalchemy import (
-    Column, String, Text, Integer, DateTime, ForeignKey, 
+    ARRAY, Column, String, Text, Integer, DateTime, ForeignKey,
     UniqueConstraint, Index, func
 )
 from sqlalchemy.dialects.postgresql import UUID, JSONB, TSVECTOR
@@ -51,6 +51,7 @@ class QAItem(Base):
     answer_preview = Column(Text)  # First 500 chars
     category = Column(Text)
     subcategory = Column(Text)
+    passages = Column(ARRAY(Text), server_default="{}")
     search_tsv = Column(TSVECTOR)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
