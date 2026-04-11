@@ -443,7 +443,7 @@ def main():
     if args.check_config:
         print("Configuration OK!")
         print(f"  DATABASE_URL: {'set' if settings.DATABASE_URL else 'not set'}")
-        print(f"  GOOGLE_API_KEY: {'set' if settings.GOOGLE_API_KEY else 'not set'}")
+        print(f"  YOUTUBE_API_KEY: {'set' if settings.YOUTUBE_API_KEY else 'not set'}")
         print(f"  GEMINI_API_KEY: {'set' if settings.GEMINI_API_KEY else 'not set'}")
         sys.exit(0)
     

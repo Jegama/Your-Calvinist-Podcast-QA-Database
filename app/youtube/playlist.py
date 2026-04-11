@@ -20,13 +20,13 @@ def get_playlist_video_ids(playlist_id: Optional[str] = None) -> list[str]:
     """
     settings = get_settings()
     
-    if not settings.GOOGLE_API_KEY:
-        raise ValueError("GOOGLE_API_KEY not configured")
-    
+    if not settings.YOUTUBE_API_KEY:
+        raise ValueError("YOUTUBE_API_KEY not configured")
+
     playlist_id = playlist_id or settings.PLAYLIST_ID
-    
+
     try:
-        youtube = build('youtube', 'v3', developerKey=settings.GOOGLE_API_KEY)
+        youtube = build('youtube', 'v3', developerKey=settings.YOUTUBE_API_KEY)
         
         video_ids = []
         next_page_token = None

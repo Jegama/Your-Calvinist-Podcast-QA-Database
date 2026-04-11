@@ -60,7 +60,8 @@ class QAItemOut(QAItemBase):
     id: str
     answer_preview: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
-    
+    passages: list[str] = Field(default_factory=list)
+
     class Config:
         from_attributes = True
 
@@ -71,9 +72,10 @@ class QAItemDetailOut(QAItemBase):
     answer: Optional[str] = None
     answer_preview: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    passages: list[str] = Field(default_factory=list)
     video_youtube_id: Optional[str] = None
     video_title: Optional[str] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -92,6 +94,7 @@ class SearchResult(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    passages: list[str] = Field(default_factory=list)
     rank: Optional[float] = None
 
 
@@ -125,6 +128,7 @@ class AskSourceOut(BaseModel):
     category: Optional[str] = None
     subcategory: Optional[str] = None
     tags: list[str] = Field(default_factory=list)
+    passages: list[str] = Field(default_factory=list)
     rank: Optional[float] = None
     source_url: Optional[str] = None
     citation: CitationOut

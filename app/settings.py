@@ -16,8 +16,8 @@ class Settings:
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
-    # YouTube API
-    GOOGLE_API_KEY: str = os.getenv("GOOGLE_API_KEY", "")
+    # YouTube Data API key for fetching video metadata and transcripts
+    YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
     
     # Gemini API for classification
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
@@ -47,8 +47,8 @@ class Settings:
         missing = []
         if not self.DATABASE_URL:
             missing.append("DATABASE_URL")
-        if not self.GOOGLE_API_KEY:
-            missing.append("GOOGLE_API_KEY")
+        if not self.YOUTUBE_API_KEY:
+            missing.append("YOUTUBE_API_KEY")
         return missing
 
 

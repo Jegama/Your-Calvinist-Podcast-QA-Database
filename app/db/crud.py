@@ -130,6 +130,7 @@ def upsert_qa_item(
     category: Optional[str] = None,
     subcategory: Optional[str] = None,
     tags: Optional[list[str]] = None,
+    passages: Optional[list[str]] = None,
 ) -> QAItem:
     """
     Insert or update a Q&A item.
@@ -148,6 +149,7 @@ def upsert_qa_item(
         setattr(qa_item, "answer_preview", answer_preview)
         setattr(qa_item, "category", category)
         setattr(qa_item, "subcategory", subcategory)
+        setattr(qa_item, "passages", passages or [])
     else:
         # Insert new
         qa_item = QAItem(
@@ -159,6 +161,7 @@ def upsert_qa_item(
             answer_preview=answer_preview,
             category=category,
             subcategory=subcategory,
+            passages=passages or [],
         )
         session.add(qa_item)
     
@@ -204,6 +207,7 @@ def bulk_upsert_qa_items(
             category=item.get("category"),
             subcategory=item.get("subcategory"),
             tags=item.get("tags"),
+            passages=item.get("passages"),
         )
         results.append(qa)
     return results
