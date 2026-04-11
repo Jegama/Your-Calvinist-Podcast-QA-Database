@@ -81,6 +81,10 @@ The `process_video()` function is the single source of truth for video processin
 - Must apply DDL from `plan.md` Section 3 before search works
 - Trigger auto-updates `search_tsv` on insert/update using `to_tsvector('english', question || answer)`
 
+**Schema migrations**:
+- Ad-hoc SQL lives in `migrations/`; apply manually against Neon with `psql "$DATABASE_URL" -f migrations/<file>.sql`
+- `001_add_passages_column.sql` — adds `qa_items.passages TEXT[]`. Apply before deploying code that writes to this column.
+
 ### Database Access Patterns
 
 - **Request scope**: Use `get_db` dependency from `app/dependencies.py` in FastAPI routes

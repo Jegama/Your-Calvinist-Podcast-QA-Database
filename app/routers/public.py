@@ -290,7 +290,10 @@ def list_questions(
     - **category**: Filter by category (e.g., "Theology")
     - **subcategory**: Filter by subcategory (e.g., "Soteriology")
     - **tags**: Comma-separated list of tags (AND logic - must have ALL tags)
-    
+    - **passage**: Filter by Bible passage. Case-insensitive prefix match
+      against any entry in `qa_items.passages`, so "Romans 9" matches
+      "Romans 9:10-13".
+
     Examples:
     - `/v1/questions?category=Theology`
     - `/v1/questions?category=Theology&subcategory=Soteriology`

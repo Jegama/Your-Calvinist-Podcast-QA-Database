@@ -209,7 +209,17 @@ def main():
     )
     
     args = parser.parse_args()
-    
+
+    # --dry-run has no effect in --from-stored mode (reprocess writes directly
+    # to the existing video rows). Reject the combination up front rather than
+    # silently mutating the DB.
+    if args.from_stored and args.dry_run:
+        print(
+            "Error: --dry-run is not supported with --from-stored "
+            "(reprocessing writes directly to existing rows)."
+        )
+        sys.exit(2)
+
     # Check configuration
     settings = get_settings()
     # --from-stored only needs DATABASE_URL (and optionally GEMINI_API_KEY),

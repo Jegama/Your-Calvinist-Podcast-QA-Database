@@ -16,7 +16,8 @@ class Settings:
     # Database
     DATABASE_URL: str = os.getenv("DATABASE_URL", "")
     
-    # YouTube Data API key for fetching video metadata and transcripts
+    # YouTube Data API key for fetching video metadata.
+    # (Transcripts are fetched via youtube_transcript_api and do not need this key.)
     YOUTUBE_API_KEY: str = os.getenv("YOUTUBE_API_KEY", "")
     
     # Gemini API for classification

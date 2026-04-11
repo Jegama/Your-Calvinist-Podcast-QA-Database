@@ -209,10 +209,10 @@ def process_video(
                     answer_preview=qa.answer_preview,
                     category=qa.category,
                     subcategory=qa.subcategory,
-                    tags=qa.tags or [],
-                    passages=qa.passages or [],
+                    tags=qa.tags,
+                    passages=qa.passages,
                 )
-            
+
             # Mark as processed
             crud.mark_video_processed(session, video)
             
@@ -301,11 +301,15 @@ def reprocess_from_stored_transcript(
             if verbose:
                 print(f"Re-processing: {youtube_id} ({video.title})")
 
-            # Convert stored JSONB back to TranscriptSegment objects
+            # Convert stored JSONB back to TranscriptSegment objects.
+            # Older rows were serialized without `duration`; fall back to a
+            # positive value so `slice_answers_by_timestamps` doesn't drop the
+            # final segment (it uses last_seg.start + duration as the end
+            # bound for the trailing question).
             segments = [
                 TranscriptSegment(
                     start=seg["start"],
-                    duration=seg.get("duration", 0.0),
+                    duration=seg.get("duration") or 5.0,
                     text=seg["text"],
                 )
                 for seg in transcript_row.raw_data
@@ -377,8 +381,8 @@ def reprocess_from_stored_transcript(
                     answer_preview=qa.answer_preview,
                     category=qa.category,
                     subcategory=qa.subcategory,
-                    tags=qa.tags or [],
-                    passages=qa.passages or [],
+                    tags=qa.tags,
+                    passages=qa.passages,
                 )
 
             crud.mark_video_processed(session, video)
