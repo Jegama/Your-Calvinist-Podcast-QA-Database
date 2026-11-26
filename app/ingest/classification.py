@@ -8,7 +8,9 @@ from sqlalchemy import select
 from app.db import crud
 from app.db.engine import get_session
 from app.db.models import ClassificationBatch, QAItem
-from app.qa.classify import MAX_INLINE_BYTES, batch_results, classification_request, inline_request_size, load_categories
+from app.qa.classify import (
+    MAX_INLINE_BYTES, Classification, batch_results, classification_request, inline_request_size, load_categories,
+)
 from app.qa.gemini import gemini_client
 from app.settings import get_settings
 
@@ -70,8 +72,10 @@ def _finish(batch_id, results=None, error=None):
             select(QAItem).where(QAItem.classification_batch_id == batch_id)
             .order_by(QAItem.video_id, QAItem.timestamp_seconds).with_for_update()
         ).all()
-        for row in rows:
-            labels = error or results.get(str(row.id), "Missing response key")
+        outcomes = [(row, error or results.get(str(row.id), "Missing response key")) for row in rows]
+        names = {name for _, labels in outcomes if isinstance(labels, Classification) for name in labels.tags}
+        tags = {tag.name: tag for tag in crud.get_or_create_tags(db, names)}
+        for row, labels in outcomes:
             if isinstance(labels, str):
                 row.classification_error = labels[:1000]
                 row.classification_state = "failed"
@@ -80,7 +84,7 @@ def _finish(batch_id, results=None, error=None):
                 row.category = labels.category
                 row.subcategory = labels.subcategory
                 row.passages = labels.passages
-                row.tags = crud.get_or_create_tags(db, list(dict.fromkeys(labels.tags)))
+                row.tags = [tags[name] for name in dict.fromkeys(labels.tags)]
                 row.classification_error = None
                 row.classification_state = "done"
                 counts["classified"] += 1

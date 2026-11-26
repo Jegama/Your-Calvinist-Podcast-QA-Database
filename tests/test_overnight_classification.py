@@ -164,6 +164,41 @@ class ClassificationTests(unittest.TestCase):
         self.client.batches.create.assert_called_once()
         self.client.batches.get.assert_called_once()
 
+    def wait_for_blocked_collector(self, holder, collector):
+        deadline = monotonic() + 5
+        while not holder.scalar(text(
+            "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted "
+            "AND pg_backend_pid() = ANY(pg_blocking_pids(pid)))"
+        )):
+            if collector.done():
+                collector.result()
+            self.assertLess(monotonic(), deadline, "collector never waited on the other transaction")
+            sleep(0.02)
+
+    def test_collectors_acquire_shared_tags_in_one_order_across_questions(self):
+        from app.db import crud
+        from app.db.models import QAItem
+        from app.ingest.classification import _claim_requests, _finish
+        from app.qa.classify import Classification
+        first, second = self.question(0), self.question(5)
+        batch, _ = _claim_requests()
+        results = {
+            str(first): Classification(category="C", subcategory="S", tags=["zulu"]),
+            str(second): Classification(category="C", subcategory="S", tags=["alpha", "zulu", "alpha"]),
+        }
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with self.sessions.begin() as holder:
+                holder.execute(text("SET LOCAL lock_timeout = '500ms'"))
+                crud.get_or_create_tags(holder, ["alpha"])
+                collector = pool.submit(_finish, batch, results)
+                self.wait_for_blocked_collector(holder, collector)
+                # The blocked collector must not have inserted zulu for its first question.
+                crud.get_or_create_tags(holder, ["zulu"])
+            self.assertEqual(collector.result(timeout=5), {"classified": 2, "failed": 0})
+        with self.sessions() as db:
+            self.assertEqual([t.name for t in db.get(QAItem, first).tags], ["zulu"])
+            self.assertCountEqual([t.name for t in db.get(QAItem, second).tags], ["alpha", "zulu"])
+
     def test_collector_waits_on_first_timestamp_before_locking_second(self):
         from app.db.models import QAItem
         from app.ingest.classification import _claim_requests, _finish
@@ -179,15 +214,7 @@ class ClassificationTests(unittest.TestCase):
             with self.sessions.begin() as ingest:
                 ingest.get(QAItem, first, with_for_update=True)
                 collector = pool.submit(_finish, batch, error="test")
-                deadline = monotonic() + 5
-                while not ingest.scalar(text(
-                    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted "
-                    "AND pg_backend_pid() = ANY(pg_blocking_pids(pid)))"
-                )):
-                    if collector.done():
-                        collector.result()
-                    self.assertLess(monotonic(), deadline, "collector never waited on the ingestion lock")
-                    sleep(0.02)
+                self.wait_for_blocked_collector(ingest, collector)
                 # With the old order the collector already owns this row.
                 ingest.get(QAItem, second, with_for_update={"nowait": True})
             self.assertEqual(collector.result(timeout=5)["failed"], 2)

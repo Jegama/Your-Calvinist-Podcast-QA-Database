@@ -2,6 +2,7 @@
 Database CRUD operations for videos, Q&A items, tags, and transcripts.
 """
 
+from collections.abc import Collection
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -104,16 +105,22 @@ def upsert_transcript(
 
 def get_or_create_tag(session: Session, name: str) -> Tag:
     """Get existing tag or create new one."""
-    tag = session.query(Tag).filter(Tag.name == name).first()
-    if not tag:
-        session.execute(insert(Tag).values(name=name).on_conflict_do_nothing(index_elements=[Tag.name]))
-        tag = session.query(Tag).filter(Tag.name == name).one()
-    return tag
+    return get_or_create_tags(session, [name])[0]
 
 
-def get_or_create_tags(session: Session, names: list[str]) -> list[Tag]:
-    """Get or create multiple tags."""
-    return [get_or_create_tag(session, name) for name in names]
+def get_or_create_tags(session: Session, names: Collection[str]) -> list[Tag]:
+    """Acquire unique tag names in a consistent order and return the caller's order."""
+    if not names:
+        return []
+    unique_names = sorted(set(names))
+    session.execute(
+        insert(Tag)
+        .values([{"name": name} for name in unique_names])
+        .on_conflict_do_nothing(index_elements=[Tag.name])
+    )
+    tags = session.query(Tag).filter(Tag.name.in_(unique_names)).all()
+    by_name = {tag.name: tag for tag in tags}
+    return [by_name[name] for name in names]
 
 
 # --- QA Item Operations ---
