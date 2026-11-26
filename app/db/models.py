@@ -52,6 +52,9 @@ class QAItem(Base):
     category = Column(Text)
     subcategory = Column(Text)
     passages = Column(ARRAY(Text), server_default="{}")
+    classification_state = Column(Text)  # queued, batched, done, failed; NULL for unrequested rows
+    classification_batch_id = Column(UUID(as_uuid=True), ForeignKey("classification_batches.id"), index=True)
+    classification_error = Column(Text)
     search_tsv = Column(TSVECTOR)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
     
@@ -62,6 +65,8 @@ class QAItem(Base):
     __table_args__ = (
         UniqueConstraint("video_id", "timestamp_seconds", name="uq_video_timestamp"),
         Index("idx_qa_video_id", "video_id"),
+        Index("ix_qa_items_classification_queued", "created_at", "id",
+              postgresql_where=classification_state == "queued"),
     )
     
     def __repr__(self):
@@ -125,3 +130,14 @@ class IngestJob(Base):
     
     def __repr__(self):
         return f"<IngestJob(youtube_id={self.youtube_id}, status={self.status})>"
+
+
+class ClassificationBatch(Base):
+    """Durable claim recorded before sending a non-idempotent Gemini batch."""
+    __tablename__ = "classification_batches"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    remote_name = Column(Text)
+    recovery_cursor = Column(Text)
+    next_check = Column(DateTime(timezone=True), nullable=False, index=True)
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())

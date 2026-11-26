@@ -9,6 +9,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse
 
 from mcp.server.transport_security import TransportSecuritySettings
 
@@ -19,12 +20,14 @@ from app.routers import public_router, ingest_router
 
 # Disable DNS rebinding protection — this is a public, open-access MCP server
 # with read-only tools. Any MCP client should be able to connect.
-archive_mcp.settings.transport_security = TransportSecuritySettings(
-    enable_dns_rebinding_protection=False,
+transport_security = TransportSecuritySettings(enable_dns_rebinding_protection=False)
+archive_mcp_http_app = archive_mcp.streamable_http_app(
+    streamable_http_path="/",
+    stateless_http=True,
+    json_response=True,
+    transport_security=transport_security,
 )
-archive_mcp.settings.streamable_http_path = "/"
-archive_mcp_http_app = archive_mcp.streamable_http_app()
-archive_mcp_sse_app = archive_mcp.sse_app()  # legacy SSE transport
+archive_mcp_sse_app = archive_mcp.sse_app(sse_path="/", transport_security=transport_security)
 
 
 @asynccontextmanager
@@ -102,6 +105,11 @@ def health_check():
     Health check endpoint for monitoring.
     """
     return {"status": "ok"}
+
+
+@app.get("/sse/sse", include_in_schema=False)
+def legacy_sse_path():
+    return RedirectResponse("/sse/")
 
 
 app.mount("/mcp", archive_mcp_http_app)

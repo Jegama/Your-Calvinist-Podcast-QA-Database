@@ -255,7 +255,12 @@ Visit the interactive docs at `/docs` to explore all endpoints, try them live, a
    CRON_SECRET=your_cron_secret
    ```
 
-6. Run the database migrations (see `plan.md` Section 2.5 for schema SQL)
+6. For an existing archive database, apply the migrations in order before starting the updated app.
+
+   ```bash
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/001_add_passages_column.sql
+   psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f migrations/002_classification_batches.sql
+   ```
 
 7. Start the development server:
    ```bash
@@ -298,14 +303,29 @@ app/
 To process existing videos locally:
 
 ```bash
-python -m app.cli.backfill --input playlist_videos.txt
+python -m app.cli.backfill --file playlist_videos.txt
 ```
 
 To process only unprocessed videos:
 
 ```bash
-python -m app.cli.backfill --input playlist_videos.txt --skip-processed
+python -m app.cli.backfill --file playlist_videos.txt --skip-processed
 ```
+
+### Overnight classification
+
+Fresh ingestion, stored-transcript reprocessing and manual timestamps save searchable Q&A immediately. With `GEMINI_API_KEY` configured, the same transaction queues those questions for classification using `GEMINI_MODEL` (default `gemini-4-hydrogen`). Existing labels stay visible while unchanged text awaits reclassification. Applying migration 002 leaves historical rows alone. Use `--from-stored` to intentionally queue an archive backfill, or `--skip-classification` to skip Gemini.
+
+Vercel runs the authenticated `/v1/ingest/classification` worker at 07:15 UTC. Each call collects one due batch and submits up to 100 queued questions. A second call at 11:15 UTC collects results. Jobs still running at that time are checked on a later run. Google's target turnaround is 24 hours, and the paid batch token rate is half the standard rate. Interactive `/v1/ask` calls use the standard rate. [Google Batch API](https://aistudio.google.com/docs/batch-api) · [Hydrogen pricing](https://aistudio.google.com/docs/pricing#gemini-4-hydrogen)
+
+To inspect progress locally or advance a larger backfill, use the same worker as cron.
+
+```bash
+python -m app.cli.classification --status
+python -m app.cli.classification
+```
+
+A batch retains its Google job name across restarts. If submission times out before the name is saved, the worker searches Google by its unique display name before collecting results. Item errors are recorded in `qa_items.classification_error`. After reviewing those errors, `python -m app.cli.classification --retry-failed` queues only failed items for another paid attempt.
 
 #### Failed Videos Not Retrying
 
@@ -344,7 +364,7 @@ The app is configured with two Vercel Cron jobs (see `vercel.json`):
 - **Vercel** - Serverless hosting + cron
 - **Neon** - Serverless PostgreSQL
 - **FastAPI** - Python web framework
-- **Gemini 3 Flash** - LLM for classification
+- **Gemini 4 Hydrogen** - batch classification and interactive archive answers
 - **YouTube Data API** - Video metadata
 - **youtube-transcript-api** - Transcript extraction
 
