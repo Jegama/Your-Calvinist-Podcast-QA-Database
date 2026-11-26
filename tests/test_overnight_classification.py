@@ -12,7 +12,7 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 from google.genai import types
-from sqlalchemy import create_engine, make_url, select, text, update
+from sqlalchemy import create_engine, event, make_url, select, text, update
 from sqlalchemy.orm import sessionmaker
 
 from app.settings import get_settings
@@ -174,6 +174,23 @@ class ClassificationTests(unittest.TestCase):
                 collector.result()
             self.assertLess(monotonic(), deadline, "collector never waited on the other transaction")
             sleep(0.02)
+
+    def test_collecting_a_full_batch_loads_tag_associations_once(self):
+        from app.ingest.classification import MAX_ITEMS, _claim_requests, _finish
+        from app.qa.classify import Classification
+        labels = Classification(category="C", subcategory="S", tags=["prayer"])
+        results = {str(self.question(i)): labels for i in range(MAX_ITEMS)}
+        batch, _ = _claim_requests()
+        relationship_loads = []
+
+        def record_load(state):
+            if state.is_relationship_load:
+                relationship_loads.append(state.statement)
+
+        event.listen(self.sessions, "do_orm_execute", record_load)
+        self.addCleanup(event.remove, self.sessions, "do_orm_execute", record_load)
+        self.assertEqual(_finish(batch, results), {"classified": MAX_ITEMS, "failed": 0})
+        self.assertEqual(len(relationship_loads), 1)
 
     def test_collectors_acquire_shared_tags_in_one_order_across_questions(self):
         from app.db import crud

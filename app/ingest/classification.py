@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 from google.genai import errors
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 
 from app.db import crud
 from app.db.engine import get_session
@@ -70,6 +71,7 @@ def _finish(batch_id, results=None, error=None):
             return counts
         rows = db.scalars(
             select(QAItem).where(QAItem.classification_batch_id == batch_id)
+            .options(selectinload(QAItem.tags))
             .order_by(QAItem.video_id, QAItem.timestamp_seconds).with_for_update()
         ).all()
         outcomes = [(row, error or results.get(str(row.id), "Missing response key")) for row in rows]
