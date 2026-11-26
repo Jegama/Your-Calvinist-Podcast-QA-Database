@@ -107,7 +107,7 @@ Public GET endpoints require no auth.
 - **Bounded execution**: Keep handlers short (<30s), use queue for long operations
 - **No long-lived connections**: Close DB sessions immediately
 - **Side-effect free**: GET handlers should be idempotent
-- **Cron configuration**: `vercel.json` checks for videos at 07:00 UTC, ingests them at 07:05, submits classifications at 07:15 and collects results at 11:15
+- **Cron configuration**: `vercel.json` checks for videos at 07:00 UTC, ingests them at 07:05, submits classifications at 07:15 and checks for results separately at 07:15 and 11:15
 
 ### Queue System
 

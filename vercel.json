@@ -27,7 +27,7 @@
     },
     {
       "path": "/v1/ingest/classification?collect_only=true",
-      "schedule": "15 11 * * *"
+      "schedule": "15 7,11 * * *"
     }
   ]
 }

@@ -328,5 +328,5 @@ def reprocess_video(
 @router.get("/classification")
 @router.post("/classification")
 def advance_classification(collect_only: bool = False):
-    """Collect a due Gemini batch and submit queued classifications."""
+    """Submit queued questions or collect a due batch in one provider call."""
     return run_classification_worker(collect_only=collect_only)

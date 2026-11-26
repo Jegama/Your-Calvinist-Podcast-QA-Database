@@ -68,7 +68,7 @@ def _finish(batch_id, results=None, error=None):
             return counts
         rows = db.scalars(
             select(QAItem).where(QAItem.classification_batch_id == batch_id)
-            .order_by(QAItem.id).with_for_update()
+            .order_by(QAItem.video_id, QAItem.timestamp_seconds).with_for_update()
         ).all()
         for row in rows:
             labels = error or results.get(str(row.id), "Missing response key")
@@ -118,8 +118,8 @@ def _poll_one(client):
                 if batch:
                     batch.recovery_cursor = next_page
             return {"reconciling": 1}
-        name = match.name
-        _record_name(batch_id, name)
+        _record_name(batch_id, match.name)
+        return {"recovered": 1}
 
     try:
         job = client.batches.get(name=name)
@@ -137,16 +137,15 @@ def _poll_one(client):
 
 
 def run_classification_worker(*, collect_only: bool = False) -> dict:
-    """Poll one due job and submit one chunk. Never wait for a batch to finish."""
+    """Advance one batch with at most one Gemini API call per invocation."""
     if not get_settings().GEMINI_API_KEY:
         return {"disabled": True}
     with gemini_client() as client:
-        result = _poll_one(client)
         if collect_only:
-            return result
+            return _poll_one(client)
         batch_id, requests = _claim_requests()
         if not requests:
-            return result
+            return _poll_one(client)
         try:
             job = client.batches.create(
                 model=get_settings().GEMINI_MODEL,
@@ -156,9 +155,6 @@ def run_classification_worker(*, collect_only: bool = False) -> dict:
         except errors.ClientError as exc:
             if exc.code == 408:
                 raise  # Ambiguous acknowledgement. Recover by display name.
-            counts = _finish(batch_id, error=f"Batch rejected ({exc.code}): {exc.message}")
-            result["failed"] = result.get("failed", 0) + counts["failed"]
-        else:
-            _record_name(batch_id, job.name)
-            result.update(submitted=len(requests), batch=job.name)
-        return result
+            return _finish(batch_id, error=f"Batch rejected ({exc.code}): {exc.message}")
+        _record_name(batch_id, job.name)
+        return {"submitted": len(requests), "batch": job.name}

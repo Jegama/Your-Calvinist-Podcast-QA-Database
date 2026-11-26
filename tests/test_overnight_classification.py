@@ -3,14 +3,16 @@
 import json
 import os
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from time import monotonic, sleep
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 from google.genai import types
-from sqlalchemy import create_engine, make_url, select, update
+from sqlalchemy import create_engine, make_url, select, text, update
 from sqlalchemy.orm import sessionmaker
 
 from app.settings import get_settings
@@ -139,9 +141,56 @@ class ClassificationTests(unittest.TestCase):
         self.make_due()
         self.client.batches.get.return_value = types.BatchJob(
             state="JOB_STATE_SUCCEEDED", dest={"inlined_responses": [response(key)]})
+        self.assertEqual(run_classification_worker(), {"recovered": 1})
+        self.client.batches.get.assert_not_called()
+        self.make_due()
         self.assertEqual(run_classification_worker(), {"classified": 1, "failed": 0})
+        self.client.batches.get.assert_called_once_with(name="batches/found")
         self.assertEqual(self.client.batches.list.call_args.kwargs["config"]["page_token"], "page2")
         self.client.batches.create.assert_called_once()
+
+    def test_submission_and_collection_use_separate_provider_calls(self):
+        from app.ingest.classification import run_classification_worker
+        self.question(1)
+        run_classification_worker()
+        self.make_due()
+        self.question(2)
+        self.client.batches.reset_mock()
+        self.client.batches.get.return_value = types.BatchJob(state="JOB_STATE_RUNNING")
+
+        self.assertEqual(run_classification_worker()["submitted"], 1)
+        self.client.batches.get.assert_not_called()
+        self.assertEqual(run_classification_worker(collect_only=True), {"running": 1})
+        self.client.batches.create.assert_called_once()
+        self.client.batches.get.assert_called_once()
+
+    def test_collector_waits_on_first_timestamp_before_locking_second(self):
+        from app.db.models import QAItem
+        from app.ingest.classification import _claim_requests, _finish
+        # Force UUID order to be the opposite of ingestion order.
+        first, second = UUID(int=2), UUID(int=1)
+        for seconds, new_id in ((0, first), (5, second)):
+            old_id = self.question(seconds)
+            with self.sessions.begin() as db:
+                db.execute(update(QAItem).where(QAItem.id == old_id).values(id=new_id))
+        batch, _ = _claim_requests()
+
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            with self.sessions.begin() as ingest:
+                ingest.get(QAItem, first, with_for_update=True)
+                collector = pool.submit(_finish, batch, error="test")
+                deadline = monotonic() + 5
+                while not ingest.scalar(text(
+                    "SELECT EXISTS (SELECT 1 FROM pg_locks WHERE NOT granted "
+                    "AND pg_backend_pid() = ANY(pg_blocking_pids(pid)))"
+                )):
+                    if collector.done():
+                        collector.result()
+                    self.assertLess(monotonic(), deadline, "collector never waited on the ingestion lock")
+                    sleep(0.02)
+                # With the old order the collector already owns this row.
+                ingest.get(QAItem, second, with_for_update={"nowait": True})
+            self.assertEqual(collector.result(timeout=5)["failed"], 2)
 
     def test_stored_fresh_and_manual_ingestion(self):
         from app.cli import ingest_manual_timestamps as manual
