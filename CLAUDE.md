@@ -64,7 +64,7 @@ The `process_video()` function is the single source of truth for video processin
 4. **Fetch transcript** segments (`app/youtube/transcripts.py`) - gets timestamped text
 5. **Store raw transcript** in `transcripts` table as JSONB for re-processing without YouTube API hits
 6. **Slice answers** by timestamp windows (`app/qa/answer_slicer.py`) - start-to-next-start windows
-7. **Classify with Gemini** (`app/qa/classify.py`) - optional, uses `categories.json` schema
+7. **Queue classification** with each Q&A upsert. The nightly worker in `app/ingest/classification.py` uses the taxonomy in `categories.json`.
 8. **Persist to database** via CRUD operations in `app/db/crud.py`
 
 ### Database Schema
@@ -84,6 +84,8 @@ The `process_video()` function is the single source of truth for video processin
 **Schema migrations**:
 - Ad-hoc SQL lives in `migrations/`; apply manually against Neon with `psql "$DATABASE_URL" -f migrations/<file>.sql`
 - `001_add_passages_column.sql` — adds `qa_items.passages TEXT[]`. Apply before deploying code that writes to this column.
+
+- Apply `002_classification_batches.sql` before deploying the batch worker or the updated archive API.
 
 ### Database Access Patterns
 
@@ -105,7 +107,7 @@ Public GET endpoints require no auth.
 - **Bounded execution**: Keep handlers short (<30s), use queue for long operations
 - **No long-lived connections**: Close DB sessions immediately
 - **Side-effect free**: GET handlers should be idempotent
-- **Cron configuration**: `vercel.json` defines two daily cron jobs at 07:00 and 07:05 UTC
+- **Cron configuration**: `vercel.json` checks for videos at 07:00 UTC, ingests them at 07:05, submits classifications at 07:15 and checks for results separately at 07:15 and 11:15
 
 ### Queue System
 
@@ -195,7 +197,7 @@ Update when adding new frontends.
 
 ## Classification System
 
-Gemini 3 Flash classifies Q&A into structured taxonomy from `categories.json`:
+Gemini 4 Hydrogen batch jobs classify Q&A into structured taxonomy from `categories.json`:
 - Category (e.g., "Theology")
 - Subcategory (e.g., "Soteriology")
 - Tags (e.g., ["Calvinism", "Election"])
@@ -250,7 +252,7 @@ https://www.youtube.com/watch?v={youtube_id}&t={timestamp_seconds}
 
 ## Development Notes
 
-- No test suite present - use `/docs` interactive API or manual curl
+- Run `python -m unittest discover -s tests -v`. Set `TEST_DATABASE_URL` to a PostgreSQL test database for the batch regression suite.
 - Keep answer_preview for 2+ hour podcasts (full answers can be 10-20 minutes of text)
 - Re-processing is safe due to `(video_id, timestamp_seconds)` uniqueness constraint
 - Transcripts stored as JSONB to avoid YouTube API rate limits on re-runs
@@ -258,4 +260,4 @@ https://www.youtube.com/watch?v={youtube_id}&t={timestamp_seconds}
 - Summary endpoint uses SQL aggregation - keep DB column names aligned with ORM changes
 - MCP is the LLM-facing interface; `/v1/ask` is the human-facing interface.
 - `/v1/questions/search` remains the low-level search endpoint (raw `plainto_tsquery`); `/v1/ask` uses Gemini to extract keywords first, then searches.
-- Keyword extraction (`app/qa/ask.py:extract_search_query`) uses Gemini Flash with `temperature=0` and `max_output_tokens=60` for fast, deterministic results. Falls back to raw question text on failure.
+- Keyword extraction (`app/qa/ask.py:extract_search_query`) uses Gemini 4 Hydrogen with low thinking on the Interactions API. Falls back to raw question text on failure.

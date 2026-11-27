@@ -16,6 +16,7 @@ from app.db import crud
 from app.youtube.playlist import get_playlist_video_ids
 from app.ingest.pipeline import process_video
 from app.ingest.jobs import get_queue_stats
+from app.ingest.classification import run_classification_worker
 
 router = APIRouter(
     prefix="/v1/ingest",
@@ -322,3 +323,10 @@ def reprocess_video(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error reprocessing video: {str(e)}"
         )
+
+
+@router.get("/classification")
+@router.post("/classification")
+def advance_classification(collect_only: bool = False):
+    """Submit queued questions or collect a due batch in one provider call."""
+    return run_classification_worker(collect_only=collect_only)

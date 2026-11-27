@@ -30,7 +30,6 @@ from app.youtube.transcripts import (
 )
 from app.qa.timestamp_parser import parse_description_timestamps
 from app.qa.answer_slicer import slice_answers_by_timestamps
-from app.qa.classify import classify_question, load_categories
 
 
 @dataclass
@@ -134,42 +133,6 @@ def process_video(
             preview_length=settings.ANSWER_PREVIEW_LENGTH,
         )
     
-    # Step 5: Classify (optional)
-    if qa_matches and not skip_classification and settings.GEMINI_API_KEY:
-        if verbose:
-            print("  Classifying questions...")
-        
-        categories = load_categories()
-        
-        for i, qa in enumerate(qa_matches):
-            if verbose:
-                print(f"    [{i+1}/{len(qa_matches)}] {qa.question[:40]}...")
-            
-            classification = classify_question(
-                qa.question,
-                qa.answer,
-                categories,
-            )
-            
-            # Store classification in the match object
-            if classification:
-                qa.category = classification.category
-                qa.subcategory = classification.subcategory
-                qa.tags = classification.tags
-                qa.passages = classification.passages
-            else:
-                qa.category = None
-                qa.subcategory = None
-                qa.tags = []
-                qa.passages = []
-    else:
-        # No classification - set empty values
-        for qa in qa_matches:
-            qa.category = None
-            qa.subcategory = None
-            qa.tags = []
-            qa.passages = []
-    
     # Step 6: Save to database
     if verbose:
         print("  Saving to database...")
@@ -207,10 +170,9 @@ def process_video(
                     question=qa.question,
                     answer=qa.answer,
                     answer_preview=qa.answer_preview,
-                    category=qa.category,
-                    subcategory=qa.subcategory,
-                    tags=qa.tags,
-                    passages=qa.passages,
+                    tags=[],
+                    passages=[],
+                    queue_classification=bool(settings.GEMINI_API_KEY) and not skip_classification,
                 )
 
             # Mark as processed
@@ -335,40 +297,6 @@ def reprocess_from_stored_transcript(
                     preview_length=settings.ANSWER_PREVIEW_LENGTH,
                 )
 
-            # Classify
-            if qa_matches and not skip_classification and settings.GEMINI_API_KEY:
-                if verbose:
-                    print("  Classifying questions...")
-
-                categories = load_categories()
-
-                for i, qa in enumerate(qa_matches):
-                    if verbose:
-                        print(f"    [{i+1}/{len(qa_matches)}] {qa.question[:40]}...")
-
-                    classification = classify_question(
-                        qa.question,
-                        qa.answer,
-                        categories,
-                    )
-
-                    if classification:
-                        qa.category = classification.category
-                        qa.subcategory = classification.subcategory
-                        qa.tags = classification.tags
-                        qa.passages = classification.passages
-                    else:
-                        qa.category = None
-                        qa.subcategory = None
-                        qa.tags = []
-                        qa.passages = []
-            else:
-                for qa in qa_matches:
-                    qa.category = None
-                    qa.subcategory = None
-                    qa.tags = []
-                    qa.passages = []
-
             # Upsert Q&A items
             for qa in qa_matches:
                 crud.upsert_qa_item(
@@ -379,10 +307,9 @@ def reprocess_from_stored_transcript(
                     question=qa.question,
                     answer=qa.answer,
                     answer_preview=qa.answer_preview,
-                    category=qa.category,
-                    subcategory=qa.subcategory,
-                    tags=qa.tags,
-                    passages=qa.passages,
+                    tags=[],
+                    passages=[],
+                    queue_classification=bool(settings.GEMINI_API_KEY) and not skip_classification,
                 )
 
             crud.mark_video_processed(session, video)

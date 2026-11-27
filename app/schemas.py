@@ -4,7 +4,7 @@ Pydantic schemas for API request/response models.
 
 from datetime import datetime
 from typing import Literal, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 # --- Video Schemas ---
@@ -23,17 +23,13 @@ class VideoOut(VideoBase):
     status: str
     processed_at: Optional[datetime] = None
     
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class VideoDetailOut(VideoOut):
     """Video response with full details."""
     description: Optional[str] = None
     channel_id: Optional[str] = None
-    
-    class Config:
-        from_attributes = True
 
 
 class VideoSummaryOut(VideoBase):
@@ -62,8 +58,7 @@ class QAItemOut(QAItemBase):
     tags: list[str] = Field(default_factory=list)
     passages: list[str] = Field(default_factory=list)
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class QAItemDetailOut(QAItemBase):
@@ -76,8 +71,7 @@ class QAItemDetailOut(QAItemBase):
     video_youtube_id: Optional[str] = None
     video_title: Optional[str] = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 # --- Search Schemas ---

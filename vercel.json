@@ -20,6 +20,14 @@
     {
       "path": "/v1/ingest/run-batch?max_jobs=5",
       "schedule": "5 7 * * *"
+    },
+    {
+      "path": "/v1/ingest/classification",
+      "schedule": "15 7 * * *"
+    },
+    {
+      "path": "/v1/ingest/classification?collect_only=true",
+      "schedule": "15 7,11 * * *"
     }
   ]
 }

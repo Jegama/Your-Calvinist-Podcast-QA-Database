@@ -2,7 +2,7 @@
 SQLAlchemy engine and session management.
 """
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, make_url
 from sqlalchemy.orm import sessionmaker, Session
 from contextlib import contextmanager
 from typing import Generator
@@ -10,14 +10,14 @@ from typing import Generator
 from app.settings import get_settings
 
 
-def get_engine():
+def get_engine(**options):
     """Create and return SQLAlchemy engine."""
     settings = get_settings()
-    return create_engine(
-        settings.DATABASE_URL,
-        pool_pre_ping=True,
-        echo=False,  # Set to True for SQL debugging
-    )
+    url = make_url(settings.DATABASE_URL)
+    if url.drivername == "postgresql":
+        # SQLAlchemy 2.1 defaults to psycopg 3 for unqualified URLs.
+        url = url.set(drivername="postgresql+psycopg2")
+    return create_engine(url, pool_pre_ping=True, **options)
 
 
 # Session factory

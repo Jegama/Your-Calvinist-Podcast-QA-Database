@@ -23,6 +23,8 @@ class Settings:
     # Gemini API for classification
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
     
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-4-hydrogen")
+
     # Playlist configuration
     PLAYLIST_ID: str = os.getenv("PLAYLIST_ID", "PLczriqVOY-tll3hzb2O7jHwKaEV1kd2IJ")
     

@@ -6,6 +6,7 @@ import logging
 from typing import Optional
 
 from app.settings import get_settings
+from app.qa.gemini import gemini_client
 
 logger = logging.getLogger(__name__)
 
@@ -17,29 +18,16 @@ async def extract_search_query(question: str) -> str:
         return question
 
     try:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
-        response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=(
-                "Extract the core search keywords from the following question. "
-                "Return ONLY the keywords separated by spaces — no explanation, "
-                "no punctuation, no quotes. Remove names like 'Keith Foskey', "
-                "filler words, and meta-phrases like 'what does he think about'. "
-                "Keep theological terms, topic nouns, and any specific Bible references.\n\n"
-                f"Question: {question}\n"
-                "Keywords:"
-            ),
-            config=types.GenerateContentConfig(
-                temperature=0.0,
-                max_output_tokens=60,
-            ),
+        prompt = (
+            "Extract the core search keywords from the following question. "
+            "Return ONLY the keywords separated by spaces — no explanation, "
+            "no punctuation, no quotes. Remove names like 'Keith Foskey', "
+            "filler words, and meta-phrases like 'what does he think about'. "
+            "Keep theological terms, topic nouns, and any specific Bible references.\n\n"
+            f"Question: {question}\n"
+            "Keywords:"
         )
-
-        text = (response.text or "").strip()
+        text = await _generate_text(prompt)
         if text:
             return text
     except Exception as e:
@@ -58,11 +46,6 @@ async def generate_grounded_answer(question: str, sources: list[dict]) -> Option
         return None
 
     try:
-        from google import genai
-        from google.genai import types
-
-        client = genai.Client(api_key=settings.GEMINI_API_KEY)
-
         formatted_sources = []
         for index, source in enumerate(sources, start=1):
             citation = source.get("citation") or {}
@@ -89,21 +72,20 @@ async def generate_grounded_answer(question: str, sources: list[dict]) -> Option
             + "\n\n".join(formatted_sources)
         )
 
-        response = await client.aio.models.generate_content(
-            model="gemini-3-flash-preview",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                thinking_config=types.ThinkingConfig(
-                    thinking_level=types.ThinkingLevel.LOW
-                )
-            ),
-        )
-
-        text = response.text
-        if not text:
-            return None
-
-        return text.strip()
-    except Exception as e:
+        return await _generate_text(prompt) or None
+    except Exception:
         logger.exception("Gemini content generation failed in /v1/ask")
         return None
+
+
+async def _generate_text(prompt: str) -> str:
+    async with gemini_client().aio as client:
+        interaction = await client.interactions.create(
+            model=get_settings().GEMINI_MODEL,
+            input=prompt,
+            generation_config={"thinking_level": "low"},
+            store=False,
+        )
+        if interaction.status == "completed":
+            return (interaction.output_text or "").strip()
+        return ""

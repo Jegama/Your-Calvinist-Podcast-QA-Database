@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Optional
 
 from pydantic import BaseModel, Field
-from mcp.server.fastmcp import FastMCP
+from mcp.server.mcpserver import MCPServer
 from mcp.types import ToolAnnotations
 
 from app.archive import get_archive_answer, list_archive_topics, search_archive
@@ -70,10 +70,9 @@ class ArchiveTopics(BaseModel):
     tags: list[str] = Field(default_factory=list)
 
 
-archive_mcp = FastMCP(
+archive_mcp = MCPServer(
     "Keith Foskey Archive",
-    stateless_http=True,
-    json_response=True,
+    version="1.0.0",
     instructions=(
         "Use this server to search Keith Foskey's archived podcast Q&A. "
         "Search before answering, read the full answer for the strongest hits, "
@@ -93,7 +92,7 @@ archive_mcp = FastMCP(
 )
 
 
-_READ_ONLY = ToolAnnotations(readOnlyHint=True, destructiveHint=False, openWorldHint=False)
+_READ_ONLY = ToolAnnotations(read_only_hint=True, destructive_hint=False, open_world_hint=False)
 
 
 # ---------------------------------------------------------------------------

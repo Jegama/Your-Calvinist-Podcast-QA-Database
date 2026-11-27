@@ -2,6 +2,7 @@
 Database CRUD operations for videos, Q&A items, tags, and transcripts.
 """
 
+from collections.abc import Collection
 from datetime import datetime, timezone
 from typing import Optional
 from sqlalchemy.orm import Session
@@ -104,17 +105,22 @@ def upsert_transcript(
 
 def get_or_create_tag(session: Session, name: str) -> Tag:
     """Get existing tag or create new one."""
-    tag = session.query(Tag).filter(Tag.name == name).first()
-    if not tag:
-        tag = Tag(name=name)
-        session.add(tag)
-        session.flush()
-    return tag
+    return get_or_create_tags(session, [name])[0]
 
 
-def get_or_create_tags(session: Session, names: list[str]) -> list[Tag]:
-    """Get or create multiple tags."""
-    return [get_or_create_tag(session, name) for name in names]
+def get_or_create_tags(session: Session, names: Collection[str]) -> list[Tag]:
+    """Acquire unique tag names in a consistent order and return the caller's order."""
+    if not names:
+        return []
+    unique_names = sorted(set(names))
+    session.execute(
+        insert(Tag)
+        .values([{"name": name} for name in unique_names])
+        .on_conflict_do_nothing(index_elements=[Tag.name])
+    )
+    tags = session.query(Tag).filter(Tag.name.in_(unique_names)).all()
+    by_name = {tag.name: tag for tag in tags}
+    return [by_name[name] for name in names]
 
 
 # --- QA Item Operations ---
@@ -131,6 +137,7 @@ def upsert_qa_item(
     subcategory: Optional[str] = None,
     tags: Optional[list[str]] = None,
     passages: Optional[list[str]] = None,
+    queue_classification: bool = False,
 ) -> QAItem:
     """
     Insert or update a Q&A item.
@@ -139,18 +146,21 @@ def upsert_qa_item(
     qa_item = session.query(QAItem).filter(
         QAItem.video_id == video_id,
         QAItem.timestamp_seconds == timestamp_seconds
-    ).first()
+    ).with_for_update().first()
     
+    same_input = qa_item is not None and (qa_item.question, qa_item.answer) == (question, answer)
+    keep_labels = queue_classification and same_input
     if qa_item:
         # Update existing
         setattr(qa_item, "timestamp_text", timestamp_text)
         setattr(qa_item, "question", question)
         setattr(qa_item, "answer", answer)
         setattr(qa_item, "answer_preview", answer_preview)
-        setattr(qa_item, "category", category)
-        setattr(qa_item, "subcategory", subcategory)
+        if not keep_labels:
+            qa_item.category = category
+            qa_item.subcategory = subcategory
         # Passages: None = leave untouched, [] = clear, [...] = replace.
-        if passages is not None:
+        if not keep_labels and passages is not None:
             setattr(qa_item, "passages", passages)
     else:
         # Insert new. Column is NOT NULL; default to [] when caller passes None.
@@ -167,12 +177,16 @@ def upsert_qa_item(
         )
         session.add(qa_item)
 
+    if not (keep_labels and qa_item.classification_state in ("queued", "batched")):
+        qa_item.classification_batch_id = None
+        qa_item.classification_error = None
+        qa_item.classification_state = "queued" if queue_classification else None
     session.flush()
 
     # Handle tags. Pass None to leave existing tags untouched; pass a list
     # (including []) to replace them. An empty list clears stale tags on
     # reprocess/reclassification.
-    if tags is not None:
+    if not keep_labels and tags is not None:
         tag_objects = get_or_create_tags(session, tags) if tags else []
         setattr(qa_item, "tags", tag_objects)
         session.flush()
@@ -231,7 +245,7 @@ def get_pending_job(session: Session) -> Optional[IngestJob]:
     """Get and lock one pending job atomically."""
     job = session.query(IngestJob).filter(
         IngestJob.status == "pending"
-    ).order_by(IngestJob.created_at).first()
+    ).order_by(IngestJob.created_at).with_for_update(skip_locked=True).first()
     
     if job:
         setattr(job, "status", "processing")
